@@ -380,24 +380,51 @@ function parseDate(s) {
 function parseWorkbook(wb) {
   const sh = wb.Sheets['Cobranzas'];
   if (!sh) { alert('Hoja "Cobranzas" no encontrada'); return; }
-  const raw = XLSX.utils.sheet_to_json(sh, { header: 1 });
+
+  // Use sheet_to_json with defval so empty cells become '' not undefined
+  const raw = XLSX.utils.sheet_to_json(sh, { header: 1, defval: '' });
+
+  // Find the header row (the one that starts with 'Fecha')
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(10, raw.length); i++) {
+    if (raw[i] && String(raw[i][0]).trim() === 'Fecha') { headerIdx = i; break; }
+  }
+  if (headerIdx === -1) { alert('No se encontró la fila de encabezados en la hoja Cobranzas'); return; }
+
+  // Map column names to indices from the header row
+  const hdr = raw[headerIdx].map(c => String(c).trim());
+  const col = name => hdr.indexOf(name);
+
+  const iFecha  = col('Fecha');
+  const iSuc    = col('Sucursal');
+  const iPerso  = col('Personal');
+  const iCond   = col('Condición Venta');
+  const iDest   = col('Destino');
+  const iAlumno = col('Alumno');
+  const iSub    = col('Subtotal');
+
+  if (iSub === -1) { alert('No se encontró la columna Subtotal. Verificá el formato del archivo.'); return; }
+
   allRows = [];
-  for (let i = 3; i < raw.length; i++) {
+  for (let i = headerIdx + 1; i < raw.length; i++) {
     const r = raw[i];
-    if (!r[0] || r[0] === 'Fecha') continue;
-    const dia = parseDate(r[0]); if (!dia) continue;
-    const sub = parseFloat(r[8]) || 0; if (sub <= 0) continue;
-    const suc = String(r[2]||''). trim();
+    if (!r || !r[iFecha] || String(r[iFecha]).trim() === '') continue;
+    const dia = parseDate(String(r[iFecha])); if (!dia) continue;
+    const sub = parseFloat(r[iSub]) || 0; if (sub <= 0) continue;
+    const suc = String(r[iSuc] || '').trim();
     if (SUC_ACTIVE[suc] === false) continue;
     allRows.push({
-      Dia: dia, Sucursal: suc,
-      Personal: String(r[3]||''). trim(),
-      CondicionVenta: String(r[4]||''). trim(),
-      Destino: String(r[6]||''). trim(),
-      Alumno: String(r[7]||''). trim(),
-      Subtotal: sub
+      Dia: dia,
+      Sucursal:      suc,
+      Personal:      String(r[iPerso]  || '').trim(),
+      CondicionVenta:String(r[iCond]   || '').trim(),
+      Destino:       String(r[iDest]   || '').trim(),
+      Alumno:        String(r[iAlumno] || '').trim(),
+      Subtotal:      sub
     });
   }
+
+  if (allRows.length === 0) { alert('No se encontraron registros válidos en la hoja Cobranzas.'); return; }
   buildDashboard();
 }
 
