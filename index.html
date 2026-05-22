@@ -381,56 +381,45 @@ function parseWorkbook(wb) {
   const sh = wb.Sheets['Cobranzas'];
   if (!sh) { alert('Hoja "Cobranzas" no encontrada'); return; }
 
-  // sheet_to_json en modo objeto usando fila 4 (índice 3) como encabezado
-  // Esto maneja correctamente las celdas fusionadas del Excel
-  const rows = XLSX.utils.sheet_to_json(sh, {
-    range: 3,        // empezar desde fila 4 (0-indexed: fila 3 = headers)
-    defval: '',      // celdas vacías = string vacío, no undefined
-    raw: false       // convertir todo a string primero
-  });
+  // El archivo ya viene con celdas desmergeadas manualmente
+  const raw = XLSX.utils.sheet_to_json(sh, { header: 1, defval: '' });
 
-  if (!rows || rows.length === 0) {
-    alert('No se encontraron datos en la hoja Cobranzas.');
-    return;
+  // Buscar fila de encabezados
+  let hdrIdx = -1;
+  for (let i = 0; i < Math.min(10, raw.length); i++) {
+    if (String(raw[i][0] || '').trim() === 'Fecha') { hdrIdx = i; break; }
   }
-
-  // Normalizar nombres de columnas (pueden tener tildes)
-  const normalizeKey = k => String(k).trim()
-    .replace('Condici\u00f3n Venta', 'CondicionVenta')
-    .replace('Condicion Venta', 'CondicionVenta');
+  if (hdrIdx < 0) { alert('No se encontró la fila "Fecha". ¿Está el archivo desmergeado?'); return; }
 
   allRows = [];
-  for (const raw of rows) {
-    // Obtener la fecha - puede estar en 'Fecha' directamente
-    const fechaVal = raw['Fecha'] || raw['fecha'] || '';
-    if (!fechaVal || fechaVal.trim() === '' || fechaVal.trim() === 'Fecha') continue;
+  for (let i = hdrIdx + 1; i < raw.length; i++) {
+    const r = raw[i];
+    if (!r || !r[0] || String(r[0]).trim() === '') continue;
 
-    const dia = parseDate(String(fechaVal).trim());
+    const dia = parseDate(String(r[0]).trim());
     if (!dia) continue;
 
-    const sub = parseFloat(String(raw['Subtotal'] || '0').replace(',', '.')) || 0;
-    if (sub <= 0) continue;
+    // Subtotal: incluye $0 (becados)
+    const sub = parseFloat(String(r[8] || '0').replace(',', '.'));
+    if (isNaN(sub) || sub < 0) continue;
 
-    const suc = String(raw['Sucursal'] || '').trim();
+    const suc = String(r[2] || '').trim();
     if (!suc || suc === 'Sucursal') continue;
     if (SUC_ACTIVE[suc] === false) continue;
-
-    // Condicion de venta puede tener tilde
-    const cond = String(raw['Condici\u00f3n Venta'] || raw['CondicionVenta'] || raw['Condicion Venta'] || '').trim();
 
     allRows.push({
       Dia:           dia,
       Sucursal:      suc,
-      Personal:      String(raw['Personal']    || '').trim(),
-      CondicionVenta: cond,
-      Destino:       String(raw['Destino']     || '').trim(),
-      Alumno:        String(raw['Alumno']      || '').trim(),
+      Personal:      String(r[3] || '').trim(),
+      CondicionVenta:String(r[4] || '').trim(),
+      Destino:       String(r[6] || '').trim(),
+      Alumno:        String(r[7] || '').trim(),
       Subtotal:      sub
     });
   }
 
   if (allRows.length === 0) {
-    alert('No se encontraron registros v\u00e1lidos. Verific\u00e1 que el archivo sea el correcto.');
+    alert('No se encontraron registros. Verificá que el archivo esté desmergeado y sea el exportado de Caja.');
     return;
   }
   buildDashboard();
