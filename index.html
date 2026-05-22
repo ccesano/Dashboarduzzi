@@ -460,7 +460,7 @@ function buildDashboard() {
     <div class="filter-row" id="filterRow">
       <div class="filter-chip">
         <label>Mes</label>
-        <select id="fMes" onchange="applyFilters()">
+        <select id="fMes" onchange="applyFilters('mes')">
           <option value="all">Todos</option>
           ${meses.map(m => {
             const [y,mo] = m.split('-');
@@ -471,32 +471,32 @@ function buildDashboard() {
       </div>
       <div class="filter-chip">
         <label>Sucursal</label>
-        <select id="fSuc" onchange="applyFilters()">
+        <select id="fSuc" onchange="applyFilters('suc')">
           <option value="all">Todas</option>
           ${areas.filter(s => allRows.some(r=>r.Sucursal===s)).map(s => `<option value="${s}">${SUC_NAMES[s]||s}</option>`).join('')}
         </select>
       </div>
       <div class="filter-chip">
         <label>Concepto</label>
-        <select id="fDest" onchange="applyFilters()" style="max-width:160px;">
+        <select id="fDest" onchange="applyFilters('dest')" style="max-width:160px;">
           <option value="all">Todos</option>
           ${dests.map(d=>`<option value="${d}">${d}</option>`).join('')}
         </select>
       </div>
       <div class="filter-chip">
         <label>Cond. Pago</label>
-        <select id="fCond" onchange="applyFilters()">
+        <select id="fCond" onchange="applyFilters('cond')">
           <option value="all">Todas</option>
           ${conds.map(c=>`<option value="${c}">${COND_NAMES[c]||c}</option>`).join('')}
         </select>
       </div>
       <div class="filter-chip">
         <label>Desde</label>
-        <input type="date" id="fDesde" onchange="applyFilters()" value="${dias[0]}">
+        <input type="date" id="fDesde" onchange="applyFilters('fecha')" value="${dias[0]}">
       </div>
       <div class="filter-chip">
         <label>Hasta</label>
-        <input type="date" id="fHasta" onchange="applyFilters()" value="${dias[dias.length-1]}">
+        <input type="date" id="fHasta" onchange="applyFilters('fecha')" value="${dias[dias.length-1]}">
       </div>
       <div class="filter-spacer"></div>
       <button class="clear-btn" onclick="clearFilters()">✕ Limpiar</button>
