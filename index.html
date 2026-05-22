@@ -458,46 +458,12 @@ function buildDashboard() {
 
     <!-- FILTERS -->
     <div class="filter-row" id="filterRow">
-      <div class="filter-chip">
-        <label>Mes</label>
-        <select id="fMes" onchange="applyFilters('mes')">
-          <option value="all">Todos</option>
-          ${meses.map(m => {
-            const [y,mo] = m.split('-');
-            const names = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-            return `<option value="${m}">${names[parseInt(mo)]} ${y}</option>`;
-          }).join('')}
-        </select>
-      </div>
-      <div class="filter-chip">
-        <label>Sucursal</label>
-        <select id="fSuc" onchange="applyFilters('suc')">
-          <option value="all">Todas</option>
-          ${areas.filter(s => allRows.some(r=>r.Sucursal===s)).map(s => `<option value="${s}">${SUC_NAMES[s]||s}</option>`).join('')}
-        </select>
-      </div>
-      <div class="filter-chip">
-        <label>Concepto</label>
-        <select id="fDest" onchange="applyFilters('dest')" style="max-width:160px;">
-          <option value="all">Todos</option>
-          ${dests.map(d=>`<option value="${d}">${d}</option>`).join('')}
-        </select>
-      </div>
-      <div class="filter-chip">
-        <label>Cond. Pago</label>
-        <select id="fCond" onchange="applyFilters('cond')">
-          <option value="all">Todas</option>
-          ${conds.map(c=>`<option value="${c}">${COND_NAMES[c]||c}</option>`).join('')}
-        </select>
-      </div>
-      <div class="filter-chip">
-        <label>Desde</label>
-        <input type="date" id="fDesde" onchange="applyFilters('fecha')" value="${dias[0]}">
-      </div>
-      <div class="filter-chip">
-        <label>Hasta</label>
-        <input type="date" id="fHasta" onchange="applyFilters('fecha')" value="${dias[dias.length-1]}">
-      </div>
+      <div class="filter-chip"><label>Mes</label><select id="fMes" onchange="applyFilters('mes')"><option value="all">Todos</option></select></div>
+      <div class="filter-chip"><label>Sucursal</label><select id="fSuc" onchange="applyFilters('suc')"><option value="all">Todas</option></select></div>
+      <div class="filter-chip"><label>Concepto</label><select id="fDest" onchange="applyFilters('dest')" style="max-width:160px;"><option value="all">Todos</option></select></div>
+      <div class="filter-chip"><label>Cond. Pago</label><select id="fCond" onchange="applyFilters('cond')"><option value="all">Todas</option></select></div>
+      <div class="filter-chip"><label>Desde</label><input type="date" id="fDesde" onchange="applyFilters('fecha')"></div>
+      <div class="filter-chip"><label>Hasta</label><input type="date" id="fHasta" onchange="applyFilters('fecha')"></div>
       <div class="filter-spacer"></div>
       <button class="clear-btn" onclick="clearFilters()">✕ Limpiar</button>
     </div>
@@ -570,6 +536,7 @@ function buildDashboard() {
     </div>
   `;
 
+  initFilterOptions();
   applyFilters();
 }
 
@@ -578,25 +545,88 @@ function buildDashboard() {
 // ════════════════════════════════════════════════
 let chartInst = null;
 
-function applyFilters() {
-  const mes  = document.getElementById('fMes')?.value || 'all';
-  const suc  = document.getElementById('fSuc')?.value || 'all';
-  const dest = document.getElementById('fDest')?.value || 'all';
-  const cond = document.getElementById('fCond')?.value || 'all';
-  const desde= document.getElementById('fDesde')?.value || '';
-  const hasta= document.getElementById('fHasta')?.value || '';
+function initFilterOptions() {
+  const mNames = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const meses = [...new Set(allRows.map(r => r.Dia.slice(0,7)))].sort();
+  refreshSelect('fMes', meses, v => { const [y,m] = v.split('-'); return mNames[parseInt(m)] + ' ' + y; }, false);
+  const sucs = [...new Set(allRows.map(r => r.Sucursal))].sort();
+  refreshSelect('fSuc', sucs, v => SUC_NAMES[v] || v, false);
+  const dias = allRows.map(r => r.Dia).sort();
+  document.getElementById('fDesde').value = dias[0];
+  document.getElementById('fHasta').value = dias[dias.length-1];
+}
 
-  filtRows = allRows.filter(r => {
+function refreshSelect(id, values, labelFn, keepCurrent = true) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const current = sel.value;
+  const allLabel = id === 'fSuc' ? 'Todas' : 'Todos';
+  sel.innerHTML = `<option value="all">${allLabel}</option>`;
+  values.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v === '' ? '__empty__' : v;
+    o.textContent = labelFn(v);
+    sel.appendChild(o);
+  });
+  if (keepCurrent && current !== 'all' && values.includes(current === '__empty__' ? '' : current)) {
+    sel.value = current;
+  } else if (!keepCurrent) {
+    sel.value = 'all';
+  }
+}
+
+function applyFilters(changedFilter) {
+  const mes   = document.getElementById('fMes')?.value  || 'all';
+  const suc   = document.getElementById('fSuc')?.value  || 'all';
+  let   dest  = document.getElementById('fDest')?.value || 'all';
+  let   cond  = document.getElementById('fCond')?.value || 'all';
+  let   desde = document.getElementById('fDesde')?.value || '';
+  let   hasta = document.getElementById('fHasta')?.value || '';
+
+  // Mes <-> Fecha: mutuamente excluyentes
+  if (changedFilter === 'mes' && mes !== 'all') {
+    const [y, m] = mes.split('-').map(Number);
+    desde = `${mes}-01`;
+    hasta = new Date(y, m, 0).toISOString().slice(0, 10);
+    document.getElementById('fDesde').value = desde;
+    document.getElementById('fHasta').value = hasta;
+  }
+  if (changedFilter === 'fecha') {
+    document.getElementById('fMes').value = 'all';
+  }
+
+  // Base rows: filtered by mes/suc/fecha only
+  const baseRows = allRows.filter(r => {
     if (mes !== 'all' && !r.Dia.startsWith(mes)) return false;
     if (suc !== 'all' && r.Sucursal !== suc)     return false;
-    if (dest!== 'all' && r.Destino  !== dest)    return false;
-    if (cond!== 'all' && r.CondicionVenta !== cond) return false;
     if (desde && r.Dia < desde) return false;
     if (hasta && r.Dia > hasta) return false;
     return true;
   });
 
-  document.getElementById('txCount').textContent = filtRows.length.toLocaleString('es-AR') + ' transacciones';
+  // Rebuild Concepto and Condicion options from baseRows
+  const availDests = [...new Set(baseRows.map(r => r.Destino))].sort();
+  const availConds = [...new Set(baseRows.map(r => r.CondicionVenta))].sort();
+  const mNames = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+  refreshSelect('fDest', availDests, v => v || '(Sin concepto)');
+  refreshSelect('fCond', availConds, v => v ? (COND_NAMES[v] || v) : '(Sin condición)');
+
+  // If selected value no longer available, reset
+  const destVal = dest === '__empty__' ? '' : dest;
+  const condVal = cond === '__empty__' ? '' : cond;
+  if (dest !== 'all' && !availDests.includes(destVal)) { document.getElementById('fDest').value = 'all'; dest = 'all'; }
+  if (cond !== 'all' && !availConds.includes(condVal)) { document.getElementById('fCond').value = 'all'; cond = 'all'; }
+
+  // Final filter
+  filtRows = baseRows.filter(r => {
+    if (dest !== 'all' && r.Destino        !== destVal) return false;
+    if (cond !== 'all' && r.CondicionVenta !== condVal) return false;
+    return true;
+  });
+
+  document.getElementById('txCount').textContent =
+    filtRows.length.toLocaleString('es-AR') + ' transacciones';
 
   updateKPIs();
   updateCompare();
@@ -608,11 +638,11 @@ function applyFilters() {
 }
 
 function clearFilters() {
-  document.getElementById('fMes').value = 'all';
-  document.getElementById('fSuc').value = 'all';
+  document.getElementById('fMes').value  = 'all';
+  document.getElementById('fSuc').value  = 'all';
   document.getElementById('fDest').value = 'all';
   document.getElementById('fCond').value = 'all';
-  const dias = allRows.map(r=>r.Dia).sort();
+  const dias = allRows.map(r => r.Dia).sort();
   document.getElementById('fDesde').value = dias[0];
   document.getElementById('fHasta').value = dias[dias.length-1];
   applyFilters();
@@ -623,22 +653,33 @@ function clearFilters() {
 // ════════════════════════════════════════════════
 function updateKPIs() {
   const total = filtRows.reduce((s,r)=>s+r.Subtotal, 0);
-  const dias  = [...new Set(filtRows.map(r=>r.Dia))];
+  const dias  = [...new Set(filtRows.map(r=>r.Dia))].sort();
   const byDay = {}; filtRows.forEach(r => byDay[r.Dia] = (byDay[r.Dia]||0) + r.Subtotal);
-  const maxEntry = Object.entries(byDay).sort((a,b)=>b[1]-a[1])[0];
   const prom  = dias.length ? total/dias.length : 0;
 
-  // Tarjeta disponible next 7 days
-  const todayStr = new Date().toISOString().slice(0,10);
-  const in7 = new Date(); in7.setDate(in7.getDate()+7);
-  const in7Str = in7.toISOString().slice(0,10);
+  // KPI 2: Disponible próx. 7 días desde la ÚLTIMA fecha del período filtrado
+  // (no desde hoy real, ya que el archivo puede ser histórico)
+  const lastDia   = dias.length ? dias[dias.length-1] : null;
+  const refDate   = lastDia ? new Date(lastDia+'T00:00:00') : new Date();
+  const refStr    = refDate.toISOString().slice(0,10);
+  const ref7      = new Date(refDate); ref7.setDate(ref7.getDate()+7);
+  const ref7Str   = ref7.toISOString().slice(0,10);
   const disp = filtRows
     .filter(r => r.CondicionVenta.includes('Tarjeta'))
     .reduce((s,r) => {
       const avail = new Date(r.Dia+'T00:00:00'); avail.setDate(avail.getDate()+7);
-      const aStr = avail.toISOString().slice(0,10);
-      return (aStr >= todayStr && aStr <= in7Str) ? s + r.Subtotal : s;
+      const aStr  = avail.toISOString().slice(0,10);
+      return (aStr > refStr && aStr <= ref7Str) ? s + r.Subtotal : s;
     }, 0);
+  const dispLabel = lastDia
+    ? 'hasta ' + fmtDate(ref7Str) 
+    : 'tarjetas +7 días';
+
+  // KPI 4: Total del día de HOY real — $0 si no hay datos de hoy
+  const todayStr  = new Date().toISOString().slice(0,10);
+  const todayTotal = byDay[todayStr] || 0;
+  const todayTxCount = filtRows.filter(r => r.Dia === todayStr).length;
+  const hasToday  = todayStr in byDay;
 
   const grid = document.getElementById('kpiGrid');
   grid.innerHTML = `
@@ -647,15 +688,15 @@ function updateKPIs() {
       <div class="kpi-value">${fmt(total)}</div>
       <div class="kpi-bottom">
         <div class="kpi-status green">● Verificado</div>
-        <div class="kpi-sub">${dias.length} días</div>
+        <div class="kpi-sub">${dias.length} días con cobros</div>
       </div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-title">Disponible (próx. 7d)</div><div class="status-dot dot-amber"></div></div>
+      <div class="kpi-top"><div class="kpi-title">Disponible (próx. 7d)</div><div class="status-dot ${disp > 0 ? 'dot-amber' : 'dot-red'}"></div></div>
       <div class="kpi-value">${fmt(disp)}</div>
       <div class="kpi-bottom">
-        <div class="kpi-status amber">● Pendiente</div>
-        <div class="kpi-sub">tarjetas +7 días</div>
+        <div class="kpi-status ${disp > 0 ? 'amber' : 'muted'}">● ${disp > 0 ? 'Pendiente' : 'Sin pendientes'}</div>
+        <div class="kpi-sub">${dispLabel}</div>
       </div>
     </div>
     <div class="kpi-card">
@@ -667,19 +708,18 @@ function updateKPIs() {
       </div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-title">Total Cobranzas del Día</div><div class="status-dot dot-green"></div></div>
-      <div class="kpi-value">${maxEntry ? fmt(maxEntry[1]) : '$0'}</div>
+      <div class="kpi-top"><div class="kpi-title">Cobranzas de Hoy</div><div class="status-dot ${hasToday ? 'dot-green' : 'dot-red'}"></div></div>
+      <div class="kpi-value" style="${!hasToday ? 'color:var(--muted)' : ''}">${fmt(todayTotal)}</div>
       <div class="kpi-bottom">
-        <div class="kpi-status green">● Consolidado</div>
-        <div class="kpi-sub">${maxEntry ? fmtDate(maxEntry[0]) : '—'}</div>
+        <div class="kpi-status ${hasToday ? 'green' : 'muted'}">● ${hasToday ? 'Consolidado' : 'Sin datos de hoy'}</div>
+        <div class="kpi-sub">${hasToday ? todayTxCount + ' cobros hoy (' + fmtDate(todayStr) + ')' : 'Último dato: ' + (lastDia ? fmtDate(lastDia) : '—')}</div>
       </div>
     </div>
   `;
 
   // Date range label
-  const sortedDias = dias.sort();
-  if (sortedDias.length)
-    document.getElementById('dateRangeLabel').textContent = fmtDate(sortedDias[0]) + ' → ' + fmtDate(sortedDias[sortedDias.length-1]);
+  if (dias.length)
+    document.getElementById('dateRangeLabel').textContent = fmtDate(dias[0]) + ' → ' + fmtDate(dias[dias.length-1]);
 }
 
 // ════════════════════════════════════════════════
