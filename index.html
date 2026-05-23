@@ -197,7 +197,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 .bot-row { display: grid; grid-template-columns: 1fr 260px; gap: 12px; min-height: 0; }
 
 /* Table */
-.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 380px; }
+.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 340px; }
 table { width: 100%; border-collapse: collapse; }
 thead { position: sticky; top: 0; z-index: 1; }
 thead th {
@@ -248,8 +248,9 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
 /* Pagination */
 .pag-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 12px; border-top: 1px solid var(--border);
+  padding: 10px 16px; border-top: 1px solid var(--border);
   font-size: 11px; color: var(--muted);
+  flex-shrink: 0; background: var(--surface);
 }
 .pag-btns { display: flex; gap: 3px; }
 .pag-btn {
@@ -358,8 +359,8 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
   </div>
 
   <!-- BOTTOM ROW: static HTML, shown after file load -->
-  <div class="bot-row" id="botRow" style="display:none;padding:0 24px 32px;min-height:480px;">
-    <div class="card" style="padding:0;overflow:hidden;">
+  <div class="bot-row" id="botRow" style="display:none;padding:0 24px 80px;min-height:520px;">
+    <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;">
       <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:12px;">
           <div>
@@ -375,7 +376,7 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
           style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border);
                  border-radius:6px;color:var(--text);font-size:12px;outline:none;width:150px;">
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" style="flex:1;">
         <table>
           <thead>
             <tr>
