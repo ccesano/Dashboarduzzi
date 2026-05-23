@@ -350,9 +350,13 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
       </button>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
       <button class="upload-btn" onclick="document.getElementById('fileInput').click()" title="Cargar nuevo archivo o actualizar datos">
-        📂 Cargar Excel
+        📂 Cargar / Actualizar
       </button>
-
+      <button onclick="clearStoredData()" title="Borrar datos guardados"
+        style="padding:6px 10px;border-radius:7px;background:transparent;border:1px solid var(--border2);
+               color:var(--muted);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;">
+        🗑
+      </button>
     </div>
   </div>
 
@@ -430,7 +434,7 @@ const EMP_COLORS = ['#e8c547','#3b82f6','#22c55e','#a855f7','#f97316','#ef4444']
 const SUC_COLORS = { Alvarado:'#3b82f6', Caseros:'#a855f7', España:'#22c55e', Doris:'#f97316' };
 const PALETTE    = ['#e8c547','#3b82f6','#22c55e','#a855f7','#f97316','#ef4444','#06b6d4'];
 
-let allRows = [], filtRows = [];
+let allRows = [], filtRows = [], lastFileName = '';
 let sortCol = 'Dia', sortAsc = false;
 let page = 1;
 const PG = 50;
@@ -446,7 +450,20 @@ function setPeriodFilter(val) {
 }
 
 // Clear stored data
-
+function clearStoredData() {
+  if (confirm('¿Borrar los datos guardados? Tendrás que cargar el Excel de nuevo.')) {
+    localStorage.removeItem('dashboardData');
+    allRows = []; filtRows = [];
+    document.getElementById('fileLabel').textContent = 'sin archivo';
+    document.getElementById('contentArea').innerHTML = `
+      <div class="empty-state">
+        <span class="big">📂</span>
+        Cargá el archivo de exportación de Caja para comenzar<br>
+        <span style="font-size:11px;color:var(--muted2);">Usá el botón "Cargar / Actualizar" arriba a la derecha</span>
+      </div>`;
+    document.getElementById('botRow').style.display = 'none';
+  }
+}
 
 // Sidebar nav toggle
 function toggleNav(id) {
@@ -476,19 +493,31 @@ function togglePrivacy() {
     .forEach(el => el.classList.toggle('privacy-mask', privacyMode));
 }
 
-// (auto-load merged into DOMContentLoaded above)
-
-// Set today label — wrapped in DOMContentLoaded to ensure elements exist
-const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+// Auto-load persisted data — esperar a que el DOM esté listo
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    const raw = localStorage.getItem('dashboardData');
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    if (!payload.rows || !payload.rows.length) return;
+    allRows = payload.rows;
+    lastFileName = payload.file || 'archivo guardado';
+    const mins = Math.round((Date.now() - payload.ts) / 60000);
+    const agoStr = mins < 1 ? 'recién cargado' : mins < 60 ? 'hace ' + mins + ' min' : 'hace ' + Math.round(mins/60) + 'h';
+    const lbl = document.getElementById('fileLabel');
+    if (lbl) lbl.textContent = lastFileName + ' · ' + agoStr;
+    buildDashboard();
+  } catch(e) {
+    console.warn('Error al cargar datos guardados:', e);
+  }
+});
 
 // Set today label
-window.onload = function() {
-  const now = new Date();
-  const todayEl = document.getElementById('todayLabel');
-  if (todayEl) todayEl.textContent =
-    DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
-};
+const now = new Date();
+const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+document.getElementById('todayLabel').textContent =
+  DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
 
 // ════════════════════════════════════════════════
 // FILE LOAD
@@ -496,6 +525,7 @@ window.onload = function() {
 document.getElementById('fileInput').addEventListener('change', e => {
   const file = e.target.files[0]; if (!file) return;
   document.getElementById('loading').classList.add('show');
+  lastFileName = file.name;
   const reader = new FileReader();
   reader.onload = ev => {
     try {
@@ -558,7 +588,14 @@ function parseWorkbook(wb) {
     alert('No se encontraron registros. Verificá que el archivo esté desmergeado y sea el exportado de Caja.');
     return;
   }
-  document.getElementById('fileLabel').textContent = file.name;
+  // Persistir datos para navegación sin recargar
+  try {
+    const payload = JSON.stringify({ rows: allRows, file: lastFileName, ts: Date.now() });
+    localStorage.setItem('dashboardData', payload);
+  } catch(e) {
+    console.warn('No se pudo guardar en localStorage:', e);
+  }
+  document.getElementById('fileLabel').textContent = lastFileName + ' · recién cargado';
   buildDashboard();
 }
 
