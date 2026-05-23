@@ -292,16 +292,17 @@ document.addEventListener('DOMContentLoaded',()=>{
   const lbl=document.getElementById('todayLabel');
   if(lbl) lbl.textContent=DAYS[now.getDay()]+' '+now.getDate()+' '+MSHORT[now.getMonth()]+' '+now.getFullYear();
   try{
-    const raw=localStorage.getItem('dashboardEgresosData');
-    if(!raw)return;
-    const payload=JSON.parse(raw);
-    if(!payload.rows?.length)return;
-    allRows=payload.rows.map(r=>({...r,Mes:r.Mes||(r.Dia?r.Dia.slice(0,7):'')})).filter(r=>r.Dia);
-    lastFileName=payload.file||'archivo guardado';
-    const mins=Math.round((Date.now()-payload.ts)/60000);
+    let egRows=null,egFile='',egTs=0;
+    const rawAll=localStorage.getItem('dashboardAllData');
+    if(rawAll){const all=JSON.parse(rawAll);if(all.pagos?.length){egRows=all.pagos;egFile=all.file||'';egTs=all.ts||0;}}
+    if(!egRows){const rawEg=localStorage.getItem('dashboardEgresosData');if(rawEg){const d=JSON.parse(rawEg);if(d.rows?.length){egRows=d.rows;egFile=d.file||'';egTs=d.ts||0;}}}
+    if(!egRows?.length)return;
+    allRows=egRows.map(r=>({...r,Mes:r.Mes||(r.Dia?r.Dia.slice(0,7):'')})).filter(r=>r.Dia);
+    lastFileName=egFile||'archivo guardado';
+    const mins=Math.round((Date.now()-egTs)/60000);
     const ago=mins<1?'recién':mins<60?'hace '+mins+'m':'hace '+Math.round(mins/60)+'h';
     const fl=document.getElementById('fileLabel');
-    if(fl) fl.textContent=lastFileName+' · '+ago;
+    if(fl)fl.textContent=lastFileName+' · '+ago;
     buildDashboard();
   }catch(e){console.warn(e);}
 });
