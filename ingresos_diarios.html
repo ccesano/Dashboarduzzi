@@ -482,6 +482,19 @@ function togglePrivacy() {
 const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
+
+  // ── Cargar datos desde sessionStorage ──────────────────────────────────────
+  function loadFromSession(sheet) {
+    const keyMap = { cobranzas: 'dashboardCob', pagos: 'dashboardPag', otrosIngresos: 'dashboardOtros' };
+    const raw = sessionStorage.getItem(keyMap[sheet]);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const rows = data[sheet];
+    if (!rows?.length) return null;
+    return { rows: rows.map(r => ({...r, Mes: r.Mes || (r.Dia ? r.Dia.slice(0,7) : '')})).filter(r => r.Dia),
+             file: data.file || '', ts: data.ts || 0 };
+  }
+
 // Set today label
 window.onload = function() {
   const now = new Date();
@@ -489,16 +502,13 @@ window.onload = function() {
   if (todayEl) todayEl.textContent =
     DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
 
-  // Cargar datos desde dashboardAllData (cargado por index.html)
+  // Cargar cobranzas desde sessionStorage
   try {
-    const _raw = localStorage.getItem('dashboardAllData');
-    if (!_raw) return;
-    const _data = JSON.parse(_raw);
-    const _rows = _data.cobranzas;
-    if (!_rows?.length) return;
-    allRows = _rows.map(r => ({...r, Mes: r.Mes || (r.Dia ? r.Dia.slice(0,7) : '')})).filter(r => r.Dia);
-    lastFileName = _data.file || 'archivo';
-    const _mins = Math.round((Date.now() - (_data.ts||0)) / 60000);
+    const _d = loadFromSession('cobranzas');
+    if (!_d) return;
+    allRows = _d.rows;
+    lastFileName = _d.file;
+    const _mins = Math.round((Date.now() - _d.ts) / 60000);
     const _ago  = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
     const _fl   = document.getElementById('fileLabel');
     if (_fl) _fl.textContent = lastFileName + ' · ' + _ago;

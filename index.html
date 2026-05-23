@@ -201,11 +201,15 @@ const SUC_ACTIVE= CFG.sucursalActive || {};
 // ── CHECK EXISTING DATA ───────────────────────────
 function checkExistingData() {
   try {
-    const raw = localStorage.getItem('dashboardAllData');
+    const raw = sessionStorage.getItem('dashboardMeta');
     if (!raw) return;
-    const data = JSON.parse(raw);
-    if (!data.cobranzas?.length && !data.pagos?.length) return;
-    showDataLoaded(data);
+    const meta = JSON.parse(raw);
+    if (!meta.file) return;
+    showDataLoaded({ file: meta.file, ts: meta.ts,
+      cobranzas: { length: meta.counts.cobranzas },
+      pagos:     { length: meta.counts.pagos },
+      otrosIngresos: { length: meta.counts.otrosIngresos }
+    });
   } catch(e) {}
 }
 
@@ -224,9 +228,9 @@ function showDataLoaded(data) {
   document.getElementById('fileInfo').classList.add('show');
   document.getElementById('fileName').textContent  = data.file || 'archivo';
   document.getElementById('fileTime').textContent  = ago;
-  document.getElementById('statCob').textContent   = (data.cobranzas?.length || 0).toLocaleString('es-AR');
-  document.getElementById('statPag').textContent   = (data.pagos?.length     || 0).toLocaleString('es-AR');
-  document.getElementById('statOtros').textContent = (data.otrosIngresos?.length || 0).toLocaleString('es-AR');
+  document.getElementById('statCob').textContent   = (Array.isArray(data.cobranzas)    ? data.cobranzas.length    : data.cobranzas?.length    || 0).toLocaleString('es-AR');
+  document.getElementById('statPag').textContent   = (Array.isArray(data.pagos)        ? data.pagos.length        : data.pagos?.length        || 0).toLocaleString('es-AR');
+  document.getElementById('statOtros').textContent = (Array.isArray(data.otrosIngresos)? data.otrosIngresos.length: data.otrosIngresos?.length || 0).toLocaleString('es-AR');
 
   document.getElementById('btnEnter').style.display = 'flex';
   document.getElementById('btnLoad').textContent    = '🔄 Actualizar archivo Excel';
@@ -255,10 +259,16 @@ document.getElementById('fileInput').addEventListener('change', e => {
       setProgress(95, 'Guardando datos...');
 
       const data = { cobranzas, pagos, otrosIngresos, file: file.name, ts: Date.now() };
-      // Limpiar claves viejas para liberar espacio
-      localStorage.removeItem('dashboardData');
-      localStorage.removeItem('dashboardEgresosData');
-      localStorage.setItem('dashboardAllData', JSON.stringify(data));
+      // Guardar en 3 claves separadas de sessionStorage
+      sessionStorage.removeItem('dashboardCob');
+      sessionStorage.removeItem('dashboardPag');
+      sessionStorage.removeItem('dashboardOtros');
+      sessionStorage.setItem('dashboardCob',   JSON.stringify({ cobranzas: cobranzas, file: file.name, ts: data.ts }));
+      sessionStorage.setItem('dashboardPag',   JSON.stringify({ pagos: pagos,         file: file.name, ts: data.ts }));
+      sessionStorage.setItem('dashboardOtros', JSON.stringify({ otrosIngresos: otrosIngresos, file: file.name, ts: data.ts }));
+      // Meta key for status check (lightweight)
+      sessionStorage.setItem('dashboardMeta',  JSON.stringify({ file: file.name, ts: data.ts,
+        counts: { cobranzas: cobranzas.length, pagos: pagos.length, otrosIngresos: otrosIngresos.length }}));
 
       setProgress(100, '¡Listo!');
       setTimeout(() => {

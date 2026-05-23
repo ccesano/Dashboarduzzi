@@ -287,6 +287,19 @@ function toggleNav(id){
 }
 
 // ── TODAY / INIT ──────────────────────────
+
+  // ── Cargar datos desde sessionStorage ──────────────────────────────────────
+  function loadFromSession(sheet) {
+    const keyMap = { cobranzas: 'dashboardCob', pagos: 'dashboardPag', otrosIngresos: 'dashboardOtros' };
+    const raw = sessionStorage.getItem(keyMap[sheet]);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const rows = data[sheet];
+    if (!rows?.length) return null;
+    return { rows: rows.map(r => ({...r, Mes: r.Mes || (r.Dia ? r.Dia.slice(0,7) : '')})).filter(r => r.Dia),
+             file: data.file || '', ts: data.ts || 0 };
+  }
+
 document.addEventListener('DOMContentLoaded',()=>{
   const now=new Date();
   const lbl=document.getElementById('todayLabel');
