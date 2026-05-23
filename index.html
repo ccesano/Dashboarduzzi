@@ -27,7 +27,7 @@
   --sidebar-w: 220px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; overflow: hidden; }
+html, body { height: 100%; }
 body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; display: flex; }
 
 /* ── SIDEBAR ── */
@@ -36,7 +36,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
   background: var(--sidebar);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
-  height: 100vh; overflow-y: auto;
+  height: 100vh; overflow-y: auto; flex-shrink: 0;
 }
 .sidebar-logo {
   padding: 20px 20px 16px;
@@ -71,7 +71,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 /* ── MAIN ── */
 .main {
   flex: 1; display: flex; flex-direction: column;
-  height: 100vh; overflow: hidden;
+  height: 100vh; overflow-y: auto;
 }
 
 /* ── TOPBAR ── */
@@ -95,7 +95,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 
 /* ── CONTENT ── */
 .content {
-  flex: 1; overflow-y: auto; padding: 20px 24px;
+  padding: 20px 24px 8px;
   display: flex; flex-direction: column; gap: 16px;
 }
 
@@ -197,7 +197,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 .bot-row { display: grid; grid-template-columns: 1fr 260px; gap: 12px; min-height: 0; }
 
 /* Table */
-.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 280px; }
+.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 320px; }
 table { width: 100%; border-collapse: collapse; }
 thead { position: sticky; top: 0; z-index: 1; }
 thead th {
@@ -216,7 +216,7 @@ td.right { text-align: right; }
 td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--accent); font-weight: 600; }
 
 /* Empleada ranking */
-.emp-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 280px; }
+.emp-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 320px; }
 .emp-row {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border-radius: 7px; background: var(--surface2);
@@ -327,6 +327,51 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
       <span style="font-size:11px;color:var(--muted2);">Usá el botón "Cargar Excel" arriba a la derecha</span>
     </div>
   </div>
+
+  <!-- BOTTOM ROW: static HTML, shown after file load -->
+  <div class="bot-row" id="botRow" style="display:none;padding:0 24px 32px;">
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div class="card-title">Detalle de Cobros Diarios</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="tableSubLabel">—</div>
+        </div>
+        <input type="text" id="tableSearch" placeholder="Buscar…" oninput="renderTable()"
+          style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border);
+                 border-radius:6px;color:var(--text);font-size:12px;outline:none;width:160px;">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortBy('Dia')"            data-col="Dia">Fecha</th>
+              <th onclick="sortBy('Sucursal')"       data-col="Sucursal">Sucursal</th>
+              <th onclick="sortBy('CondicionVenta')" data-col="CondicionVenta">Condición</th>
+              <th onclick="sortBy('Destino')"        data-col="Destino">Concepto</th>
+              <th onclick="sortBy('Alumno')"         data-col="Alumno">Alumno</th>
+              <th onclick="sortBy('Personal')"       data-col="Personal">Personal</th>
+              <th onclick="sortBy('Subtotal')"       data-col="Subtotal" style="text-align:right;">Monto</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <div class="pag-row">
+        <span id="pageInfo">—</span>
+        <div class="pag-btns" id="pagBtns"></div>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);">
+        <div class="card-title">Cuotas Cobradas por Empleada</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">cantidad de cobros en el período</div>
+      </div>
+      <div style="padding:12px;">
+        <div class="emp-list" id="empList"></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -490,52 +535,9 @@ function buildDashboard() {
         <div class="avail-grid" id="availGrid"></div>
       </div>
     </div>
+`;
 
-    <!-- BOTTOM -->
-    <div class="bot-row">
-      <div class="card" style="padding:0;overflow:hidden;">
-        <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <div class="card-title">Detalle de Cobros Diarios</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="tableSubLabel">—</div>
-          </div>
-          <input type="text" id="tableSearch" placeholder="Buscar…" oninput="renderTable()"
-            style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border);
-                   border-radius:6px;color:var(--text);font-size:12px;outline:none;width:160px;">
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th onclick="sortBy('Dia')"           data-col="Dia">Fecha</th>
-                <th onclick="sortBy('Sucursal')"      data-col="Sucursal">Sucursal</th>
-                <th onclick="sortBy('CondicionVenta')" data-col="CondicionVenta">Condición Venta</th>
-                <th onclick="sortBy('Destino')"       data-col="Destino">Concepto</th>
-                <th onclick="sortBy('Alumno')"        data-col="Alumno">Alumno</th>
-                <th onclick="sortBy('Personal')"      data-col="Personal">Personal</th>
-                <th onclick="sortBy('Subtotal')"      data-col="Subtotal" style="text-align:right;">Monto</th>
-              </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-          </table>
-        </div>
-        <div class="pag-row">
-          <span id="pageInfo">—</span>
-          <div class="pag-btns" id="pagBtns"></div>
-        </div>
-      </div>
-      <div class="card" style="padding:0;overflow:hidden;">
-        <div style="padding:12px 16px;border-bottom:1px solid var(--border);">
-          <div class="card-title">Cuotas Cobradas por Empleada</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">cantidad de cobros en el período</div>
-        </div>
-        <div style="padding:12px;">
-          <div class="emp-list" id="empList"></div>
-        </div>
-      </div>
-    </div>
-  `;
-
+  document.getElementById("botRow").style.display = "grid";
   initFilterOptions();
   applyFilters();
 }
@@ -726,50 +728,81 @@ function updateKPIs() {
 // COMPARE WIDGET
 // ════════════════════════════════════════════════
 function updateCompare() {
-  const byDay = {};
-  filtRows.forEach(r => { byDay[r.Dia] = (byDay[r.Dia]||0) + 1; }); // COUNT not sum
-  const dias = Object.keys(byDay).sort();
-  if (!dias.length) { document.getElementById('compareWrap').innerHTML = '<div style="color:var(--muted);font-size:12px;">Sin datos</div>'; return; }
-
-  // Split by months
-  const months = [...new Set(dias.map(d=>d.slice(0,7)))].sort();
   const wrap = document.getElementById('compareWrap');
+  if (!filtRows.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;">Sin datos</div>'; return; }
 
-  if (months.length >= 2) {
-    const curr = months[months.length-1];
-    const prev = months[months.length-2];
-    const currDays = dias.filter(d=>d.startsWith(curr));
-    const prevDays = dias.filter(d=>d.startsWith(prev));
-    const currTotal = currDays.reduce((s,d)=>s+(byDay[d]||0), 0);
-    const prevTotal = prevDays.reduce((s,d)=>s+(byDay[d]||0), 0);
-    const maxVal = Math.max(currTotal, prevTotal, 1);
-    const delta = prevTotal ? ((currTotal-prevTotal)/prevTotal*100) : 0;
-    const deltaClass = delta >= 0 ? 'delta-up' : 'delta-down';
-    const deltaSign  = delta >= 0 ? '+' : '';
-    const [cy,cm] = curr.split('-');
-    const [py,pm] = prev.split('-');
-    const mnames = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const mnames = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-    wrap.innerHTML = `
-      <div class="compare-row">
-        <div class="compare-label">Hoy (${mnames[parseInt(cm)]} ${cy})</div>
-        <div class="compare-count">${currTotal} Cobros</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${currTotal/maxVal*100}%;background:#22c55e;"></div></div>
-      </div>
-      <div class="compare-row">
-        <div class="compare-label">Mes Ant. (${mnames[parseInt(pm)]})</div>
-        <div class="compare-count">${prevTotal} Cobros</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${prevTotal/maxVal*100}%;background:#6b7280;"></div></div>
-      </div>
-      <div style="margin-top:6px;">
-        <span class="compare-delta ${deltaClass}">${deltaSign}${delta.toFixed(1)}% (${currTotal-prevTotal} cobros ${delta>=0?'más':'menos'})</span>
-      </div>
-    `;
-    document.getElementById('compareSubtitle').textContent = `${mnames[parseInt(cm)]} vs ${mnames[parseInt(pm)]} — cantidad de cobros por mes`;
-  } else {
-    const total = Object.values(byDay).reduce((s,v)=>s+v, 0);
-    wrap.innerHTML = `<div style="font-size:13px;font-weight:600;color:var(--text)">${total} cobros totales en el período</div>`;
-  }
+  // Usar la última fecha del período filtrado como referencia "hoy"
+  const dias = [...new Set(filtRows.map(r => r.Dia))].sort();
+  const refDay   = dias[dias.length - 1];          // ej: "2026-04-30"
+  const [ry, rm] = refDay.split('-').map(Number);  // año y mes de referencia
+  const dayOfMonth = parseInt(refDay.slice(8));    // día del mes de referencia
+
+  // Mes actual: mismo mes que refDay, acumulado hasta dayOfMonth
+  const currMonth = `${String(ry).padStart(4,'0')}-${String(rm).padStart(2,'0')}`;
+  const currRows  = filtRows.filter(r => r.Dia.startsWith(currMonth) && parseInt(r.Dia.slice(8)) <= dayOfMonth);
+  const currCount = currRows.length;
+  const currMonto = currRows.reduce((s,r) => s + r.Subtotal, 0);
+
+  // Mes anterior: mismo número de día
+  const prevDate  = new Date(ry, rm - 2, 1); // primer día del mes anterior
+  const prevY     = prevDate.getFullYear();
+  const prevM     = prevDate.getMonth() + 1;
+  const prevMonth = `${String(prevY).padStart(4,'0')}-${String(prevM).padStart(2,'0')}`;
+  // Último día disponible del mes anterior (no superar el total de días del mes)
+  const daysInPrev = new Date(prevY, prevM, 0).getDate();
+  const cutoffDay  = Math.min(dayOfMonth, daysInPrev);
+  const prevRows   = filtRows.filter(r => r.Dia.startsWith(prevMonth) && parseInt(r.Dia.slice(8)) <= cutoffDay);
+  const prevCount  = prevRows.length;
+  const prevMonto  = prevRows.reduce((s,r) => s + r.Subtotal, 0);
+
+  const maxCount = Math.max(currCount, prevCount, 1);
+  const maxMonto = Math.max(currMonto, prevMonto, 1);
+  const deltaCount = prevCount ? ((currCount - prevCount) / prevCount * 100) : 0;
+  const deltaMonto = prevMonto ? ((currMonto - prevMonto) / prevMonto * 100) : 0;
+  const dcClass = deltaCount >= 0 ? 'delta-up' : 'delta-down';
+  const dmClass = deltaMonto >= 0 ? 'delta-up' : 'delta-down';
+  const sign = v => v >= 0 ? '+' : '';
+
+  wrap.innerHTML = `
+    <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+      Acumulado al día ${dayOfMonth}
+    </div>
+
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600;">COBROS (cantidad)</div>
+    <div class="compare-row">
+      <div class="compare-label">${mnames[rm]} ${ry}</div>
+      <div class="compare-count">${currCount.toLocaleString('es-AR')}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${currCount/maxCount*100}%;background:#22c55e;"></div></div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-label">${mnames[prevM]} ${prevY}</div>
+      <div class="compare-count">${prevCount.toLocaleString('es-AR')}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${prevCount/maxCount*100}%;background:#6b7280;"></div></div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <span class="compare-delta ${dcClass}">${sign(deltaCount)}${deltaCount.toFixed(1)}% (${currCount-prevCount >= 0 ? '+':''}${currCount-prevCount} cobros)</span>
+    </div>
+
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600;">MONTO RECAUDADO</div>
+    <div class="compare-row">
+      <div class="compare-label">${mnames[rm]} ${ry}</div>
+      <div class="compare-count" style="font-size:11px;">${fmtShort(currMonto)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${currMonto/maxMonto*100}%;background:#e8c547;"></div></div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-label">${mnames[prevM]} ${prevY}</div>
+      <div class="compare-count" style="font-size:11px;">${fmtShort(prevMonto)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${prevMonto/maxMonto*100}%;background:#6b7280;"></div></div>
+    </div>
+    <div>
+      <span class="compare-delta ${dmClass}">${sign(deltaMonto)}${deltaMonto.toFixed(1)}% (${deltaMonto>=0?'+':''}${fmtShort(currMonto-prevMonto)})</span>
+    </div>
+  `;
+
+  document.getElementById('compareSubtitle').textContent =
+    `${mnames[rm]} vs ${mnames[prevM]} — acumulado al día ${dayOfMonth} de cada mes`;
 }
 
 // ════════════════════════════════════════════════
@@ -807,43 +840,62 @@ function updateDailyChart() {
 // ════════════════════════════════════════════════
 function updateCalendar() {
   const grid = document.getElementById('availGrid');
-  const today = new Date();
 
-  // Build avail map from filtered rows
-  const availMap = {};
+  // Usar primera fecha del período como inicio del calendario
+  const dias = [...new Set(filtRows.map(r => r.Dia))].sort();
+  if (!dias.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;">Sin datos</div>'; return; }
+
+  const firstDia = dias[0];
+  const startDate = new Date(firstDia + 'T00:00:00');
+  // Empezar desde el lunes de la semana del primer día
+  const dow = startDate.getDay(); // 0=dom
+  const calStart = new Date(startDate);
+  calStart.setDate(calStart.getDate() - dow); // retroceder al domingo
+
+  // Mapa: fecha -> total recaudado
+  const dayMap = {};
   filtRows.forEach(r => {
-    if (r.CondicionVenta.includes('Tarjeta')) {
-      const d = new Date(r.Dia+'T00:00:00'); d.setDate(d.getDate()+7);
-      const key = d.toISOString().slice(0,10);
-      if (!availMap[key]) availMap[key] = { total: 0, cond: '' };
-      availMap[key].total += r.Subtotal;
-      availMap[key].cond = r.CondicionVenta.replace('Tarjeta de ','');
-    }
+    dayMap[r.Dia] = (dayMap[r.Dia] || 0) + r.Subtotal;
   });
 
-  // 30-day calendar from today
-  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-  const startDow = today.getDay();
-  const cells = [];
+  // Mostrar el mes del primer día del período (4-5 semanas)
+  const [sy, sm] = firstDia.split('-').map(Number);
+  const lastDayOfMonth = new Date(sy, sm, 0).getDate();
+  const lastDia = `${String(sy).padStart(4,'0')}-${String(sm).padStart(2,'0')}-${String(lastDayOfMonth).padStart(2,'0')}`;
 
-  // Blank cells for alignment
-  for (let i = 0; i < startDow; i++) cells.push(null);
-  for (let i = 0; i < 30; i++) {
-    const d = new Date(today); d.setDate(d.getDate() + i);
-    cells.push(d.toISOString().slice(0,10));
+  const todayStr = new Date().toISOString().slice(0,10);
+  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  const cells = [];
+  const cur = new Date(calStart);
+  // Generate until we've passed the last day of the month (max 6 weeks)
+  while (cur.toISOString().slice(0,10) <= lastDia || cells.length % 7 !== 0) {
+    cells.push(cur.toISOString().slice(0,10));
+    cur.setDate(cur.getDate() + 1);
+    if (cells.length > 42) break; // safety cap
   }
 
-  const todayStr = today.toISOString().slice(0,10);
+  // Find max for color intensity
+  const vals = Object.values(dayMap).filter(v => v > 0);
+  const maxVal = vals.length ? Math.max(...vals) : 1;
 
   grid.innerHTML = dayNames.map(d => `<div class="avail-day-label">${d}</div>`).join('') +
     cells.map(date => {
-      if (!date) return `<div class="avail-cell empty"></div>`;
-      const d = new Date(date+'T00:00:00');
+      const d = new Date(date + 'T00:00:00');
+      const inMonth = d.getMonth() + 1 === sm && d.getFullYear() === sy;
       const isToday = date === todayStr;
-      const info = availMap[date];
-      return `<div class="avail-cell ${info?'has-data':''} ${isToday?'today':''}" title="${date}">
-        <div class="day-num">${d.getDate()}</div>
-        ${info ? `<div class="day-amt">${fmtShort(info.total)}</div><div class="day-cond">${info.cond}</div>` : ''}
+      const total   = dayMap[date] || 0;
+      const hasData = total > 0;
+      // Color intensity based on amount relative to max
+      const intensity = hasData ? Math.max(0.12, total / maxVal) : 0;
+      const bg = hasData ? `rgba(232,197,71,${intensity * 0.5})` : '';
+      const borderStyle = isToday ? 'border:1px solid var(--accent);' : '';
+      const opacity = inMonth ? '1' : '0.3';
+      return `<div class="avail-cell ${hasData ? 'has-data' : ''}"
+        style="opacity:${opacity};${bg ? 'background:'+bg+';' : ''}${borderStyle}"
+        title="${date}${hasData ? ' — ' + fmt(total) : ''}">
+        <div class="day-num" style="color:${isToday ? 'var(--accent)' : 'var(--muted)'};${isToday?'font-weight:700;':''}">${d.getDate()}</div>
+        ${hasData ? `<div class="day-amt">${fmtShort(total)}</div>` : ''}
       </div>`;
     }).join('');
 }
