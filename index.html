@@ -197,7 +197,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 .bot-row { display: grid; grid-template-columns: 1fr 260px; gap: 12px; min-height: 0; }
 
 /* Table */
-.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 320px; }
+.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 380px; }
 table { width: 100%; border-collapse: collapse; }
 thead { position: sticky; top: 0; z-index: 1; }
 thead th {
@@ -216,7 +216,7 @@ td.right { text-align: right; }
 td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--accent); font-weight: 600; }
 
 /* Empleada ranking */
-.emp-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 320px; }
+.emp-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 380px; }
 .emp-row {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border-radius: 7px; background: var(--surface2);
@@ -284,6 +284,21 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
 .toggle-period-btn + .toggle-period-btn { border-left: 1px solid var(--border2); }
 .toggle-period-btn.active { background: rgba(232,197,71,0.12); color: var(--accent); }
 
+.privacy-mask {
+  filter: blur(6px);
+  user-select: none;
+  transition: filter 0.2s;
+}
+.privacy-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 7px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--muted); font-size: 12px; cursor: pointer;
+  font-family: 'Inter', sans-serif; transition: all 0.15s;
+}
+.privacy-btn:hover { border-color: var(--border2); color: var(--text); }
+.privacy-btn.active { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: var(--red); }
+
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
@@ -323,6 +338,9 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
     </div>
     <div class="topbar-right">
       <span class="topbar-date" id="todayLabel">—</span>
+      <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()" title="Ocultar montos">
+        👁 Modo privado
+      </button>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
       <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
         📂 Cargar Excel
@@ -340,7 +358,7 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
   </div>
 
   <!-- BOTTOM ROW: static HTML, shown after file load -->
-  <div class="bot-row" id="botRow" style="display:none;padding:0 24px 32px;">
+  <div class="bot-row" id="botRow" style="display:none;padding:0 24px 32px;min-height:480px;">
     <div class="card" style="padding:0;overflow:hidden;">
       <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:12px;">
@@ -417,6 +435,24 @@ function setPeriodFilter(val) {
   page = 1;
   renderTable();
   renderEmpleadas();
+}
+
+// Privacy mode
+let privacyMode = false;
+
+function togglePrivacy() {
+  privacyMode = !privacyMode;
+  const btn = document.getElementById('privacyBtn');
+  if (privacyMode) {
+    btn.textContent = '🙈 Mostrar montos';
+    btn.classList.add('active');
+  } else {
+    btn.textContent = '👁 Modo privado';
+    btn.classList.remove('active');
+  }
+  // Apply/remove blur to all amount elements
+  document.querySelectorAll('.kpi-value, .amt, .compare-count, .day-amt, .legend-val')
+    .forEach(el => el.classList.toggle('privacy-mask', privacyMode));
 }
 
 // Set today label
@@ -749,6 +785,11 @@ function updateKPIs() {
   // Date range label
   if (dias.length)
     document.getElementById('dateRangeLabel').textContent = fmtDate(dias[0]) + ' → ' + fmtDate(dias[dias.length-1]);
+  // Reapply privacy mode if active
+  if (privacyMode) {
+    document.querySelectorAll('.kpi-value, .amt, .compare-count, .day-amt')
+      .forEach(el => el.classList.add('privacy-mask'));
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -830,6 +871,9 @@ function updateCompare() {
 
   document.getElementById('compareSubtitle').textContent =
     `${mnames[rm]} vs ${mnames[prevM]} — acumulado al día ${dayOfMonth} de cada mes`;
+  if (privacyMode) {
+    document.querySelectorAll('.compare-count, .compare-delta').forEach(el => el.classList.add('privacy-mask'));
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -925,6 +969,9 @@ function updateCalendar() {
         ${hasData ? `<div class="day-amt">${fmtShort(total)}</div>` : ''}
       </div>`;
     }).join('');
+  if (privacyMode) {
+    document.querySelectorAll('.day-amt').forEach(el => el.classList.add('privacy-mask'));
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -981,6 +1028,10 @@ function renderTable() {
   if (lbl) lbl.textContent = `${tot.toLocaleString('es-AR')} cobros${todayCtx} — total: ${fmt(rows.reduce((s,r)=>s+r.Subtotal,0))}`;
   document.getElementById('pageInfo').textContent = `${(page-1)*PG+1}–${Math.min(page*PG,tot)} de ${tot}`;
 
+  // Reapply privacy mode
+  if (privacyMode) {
+    document.querySelectorAll('.amt').forEach(el => el.classList.add('privacy-mask'));
+  }
   const pg = document.getElementById('pagBtns');
   pg.innerHTML = '';
   const addB = (lbl, p, dis=false, act=false) => {
