@@ -255,10 +255,10 @@ document.getElementById('fileInput').addEventListener('change', e => {
       setProgress(95, 'Guardando datos...');
 
       const data = { cobranzas, pagos, otrosIngresos, file: file.name, ts: Date.now() };
+      // Limpiar claves viejas para liberar espacio
+      localStorage.removeItem('dashboardData');
+      localStorage.removeItem('dashboardEgresosData');
       localStorage.setItem('dashboardAllData', JSON.stringify(data));
-      // Compatibility keys for pages not yet updated
-      localStorage.setItem('dashboardData',        JSON.stringify({ rows: cobranzas,    file: file.name, ts: data.ts }));
-      localStorage.setItem('dashboardEgresosData', JSON.stringify({ rows: pagos,        file: file.name, ts: data.ts }));
 
       setProgress(100, '¡Listo!');
       setTimeout(() => {
