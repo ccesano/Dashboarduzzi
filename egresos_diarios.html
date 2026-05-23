@@ -171,10 +171,10 @@ td.amt{font-family:'DM Mono',monospace;text-align:right;color:var(--red);font-we
   </div>
 
   <div class="content" id="contentArea">
-    <div class="empty-state">
+    <div class="empty-state" id="emptyMsg">
       <span class="big">📂</span>
-      Cargá el archivo de exportación de Caja para comenzar<br>
-      <span style="font-size:11px;color:var(--muted2);">Usá el botón "Cargar Excel" arriba a la derecha</span>
+      Cargá el archivo de exportación de Caja para ver los egresos<br>
+      <span style="font-size:11px;color:var(--muted2);">El archivo debe tener la hoja "Pagos" — usá el botón arriba a la derecha</span>
     </div>
   </div>
 
@@ -292,7 +292,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const lbl=document.getElementById('todayLabel');
   if(lbl) lbl.textContent=DAYS[now.getDay()]+' '+now.getDate()+' '+MSHORT[now.getMonth()]+' '+now.getFullYear();
   try{
-    const raw=localStorage.getItem('dashboardData');
+    const raw=localStorage.getItem('dashboardEgresosData');
     if(!raw)return;
     const payload=JSON.parse(raw);
     if(!payload.rows?.length)return;
@@ -363,10 +363,42 @@ function parseWorkbook(wb){
     });
   }
   if(!allRows.length){alert('No se encontraron registros de egresos válidos.');return;}
-  // Save egresos separately so ingresos data is not overwritten
+
+  // Save egresos data
   try{
     localStorage.setItem('dashboardEgresosData',JSON.stringify({rows:allRows,file:lastFileName,ts:Date.now()}));
   }catch(e){}
+
+  // Also parse Cobranzas and save dashboardData so other screens work too
+  const shCob=wb.Sheets['Cobranzas'];
+  if(shCob){
+    try{
+      const rawCob=XLSX.utils.sheet_to_json(shCob,{header:1,defval:''});
+      let hdrCob=-1;
+      for(let i=0;i<Math.min(10,rawCob.length);i++){
+        if(String(rawCob[i][0]||'').trim()==='Fecha'){hdrCob=i;break;}
+      }
+      if(hdrCob>=0){
+        const cobRows=[];
+        for(let i=hdrCob+1;i<rawCob.length;i++){
+          const r=rawCob[i];
+          if(!r||!r[0]||String(r[0]).trim()==='')continue;
+          const dia=parseDate(String(r[0]).trim());if(!dia)continue;
+          const sub=parseFloat(String(r[8]||'0').replace(',','.'));
+          if(isNaN(sub)||sub<0)continue;
+          const suc=String(r[2]||'').trim();
+          if(!suc||suc==='Sucursal')continue;
+          cobRows.push({Dia:dia,Mes:dia.slice(0,7),Sucursal:suc,
+            Personal:String(r[3]||'').trim(),CondicionVenta:String(r[4]||'').trim(),
+            Destino:String(r[6]||'').trim(),Alumno:String(r[7]||'').trim(),Subtotal:sub});
+        }
+        if(cobRows.length){
+          localStorage.setItem('dashboardData',JSON.stringify({rows:cobRows,file:lastFileName,ts:Date.now()}));
+        }
+      }
+    }catch(e){console.warn('Error parsing Cobranzas:',e);}
+  }
+
   const fl=document.getElementById('fileLabel');
   if(fl) fl.textContent=lastFileName+' · recién cargado';
   buildDashboard();
