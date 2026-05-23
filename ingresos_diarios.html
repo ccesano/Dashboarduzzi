@@ -493,8 +493,8 @@ function togglePrivacy() {
     .forEach(el => el.classList.toggle('privacy-mask', privacyMode));
 }
 
-// Auto-load persisted data on page load
-(function() {
+// Auto-load persisted data — esperar a que el DOM esté listo
+document.addEventListener('DOMContentLoaded', function() {
   try {
     const raw = localStorage.getItem('dashboardData');
     if (!raw) return;
@@ -502,14 +502,15 @@ function togglePrivacy() {
     if (!payload.rows || !payload.rows.length) return;
     allRows = payload.rows;
     lastFileName = payload.file || 'archivo guardado';
-    const ago = Math.round((Date.now() - payload.ts) / 60000);
-    const agoStr = ago < 60 ? ago + ' min' : Math.round(ago/60) + 'h';
-    document.getElementById('fileLabel').textContent = lastFileName + ' · hace ' + agoStr;
+    const mins = Math.round((Date.now() - payload.ts) / 60000);
+    const agoStr = mins < 1 ? 'recién cargado' : mins < 60 ? 'hace ' + mins + ' min' : 'hace ' + Math.round(mins/60) + 'h';
+    const lbl = document.getElementById('fileLabel');
+    if (lbl) lbl.textContent = lastFileName + ' · ' + agoStr;
     buildDashboard();
   } catch(e) {
     console.warn('Error al cargar datos guardados:', e);
   }
-})();
+});
 
 // Set today label
 const now = new Date();
