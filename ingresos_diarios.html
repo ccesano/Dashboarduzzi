@@ -493,8 +493,19 @@ function togglePrivacy() {
     .forEach(el => el.classList.toggle('privacy-mask', privacyMode));
 }
 
-// Auto-load persisted data — esperar a que el DOM esté listo
+// (auto-load merged into DOMContentLoaded above)
+
+// Set today label — wrapped in DOMContentLoaded to ensure elements exist
+const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
 document.addEventListener('DOMContentLoaded', function() {
+  const now = new Date();
+  const todayEl = document.getElementById('todayLabel');
+  if (todayEl) todayEl.textContent =
+    DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
+
+  // Auto-load persisted data
   try {
     const raw = localStorage.getItem('dashboardData');
     if (!raw) return;
@@ -511,13 +522,6 @@ document.addEventListener('DOMContentLoaded', function() {
     console.warn('Error al cargar datos guardados:', e);
   }
 });
-
-// Set today label
-const now = new Date();
-const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-document.getElementById('todayLabel').textContent =
-  DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
 
 // ════════════════════════════════════════════════
 // FILE LOAD
