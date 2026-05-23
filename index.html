@@ -150,7 +150,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 .kpi-sub { font-size: 10.5px; color: var(--muted2); }
 
 /* ── MIDDLE ROW ── */
-.mid-row { display: grid; grid-template-columns: 1fr 300px; gap: 12px; }
+.mid-row { display: grid; grid-template-columns: 1fr 260px; gap: 12px; }
 .card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; padding: 16px 18px;
@@ -172,15 +172,15 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 
 /* Disponibilidad calendar */
 .avail-grid {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
 }
 .avail-day-label {
   text-align: center; font-size: 9px; color: var(--muted2);
   text-transform: uppercase; padding-bottom: 4px;
 }
 .avail-cell {
-  border-radius: 5px; padding: 4px 3px; text-align: center;
-  min-height: 44px; display: flex; flex-direction: column;
+  border-radius: 5px; padding: 3px 2px; text-align: center;
+  min-height: 36px; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 1px;
   border: 1px solid transparent; cursor: default;
   transition: border-color 0.15s;
@@ -189,8 +189,8 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 .avail-cell.empty { background: transparent; }
 .avail-cell.has-data { background: var(--surface2); }
 .avail-cell.today { border-color: var(--accent) !important; }
-.avail-cell .day-num { font-size: 10px; color: var(--muted); }
-.avail-cell .day-amt { font-size: 9px; font-weight: 600; color: var(--accent); font-family: 'DM Mono', monospace; }
+.avail-cell .day-num { font-size: 9px; color: var(--muted); }
+.avail-cell .day-amt { font-size: 8px; font-weight: 600; color: var(--accent); font-family: 'DM Mono', monospace; }
 .avail-cell .day-cond { font-size: 8px; color: var(--muted2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* ── BOTTOM ROW ── */
@@ -273,6 +273,17 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
   animation: spin 0.65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.toggle-period {
+  display: flex; gap: 0; border: 1px solid var(--border2); border-radius: 6px; overflow: hidden;
+}
+.toggle-period-btn {
+  padding: 4px 12px; background: transparent; border: none;
+  color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer;
+  font-family: 'Inter', sans-serif; transition: all 0.15s; white-space: nowrap;
+}
+.toggle-period-btn + .toggle-period-btn { border-left: 1px solid var(--border2); }
+.toggle-period-btn.active { background: rgba(232,197,71,0.12); color: var(--accent); }
+
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
@@ -331,14 +342,20 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
   <!-- BOTTOM ROW: static HTML, shown after file load -->
   <div class="bot-row" id="botRow" style="display:none;padding:0 24px 32px;">
     <div class="card" style="padding:0;overflow:hidden;">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
-        <div>
-          <div class="card-title">Detalle de Cobros Diarios</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="tableSubLabel">—</div>
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div>
+            <div class="card-title">Detalle de Cobros</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px;" id="tableSubLabel">—</div>
+          </div>
+          <div class="toggle-period">
+            <button class="toggle-period-btn active" id="toggleAll" onclick="setPeriodFilter('all')">Todo el período</button>
+            <button class="toggle-period-btn" id="toggleHoy" onclick="setPeriodFilter('hoy')">Solo hoy</button>
+          </div>
         </div>
         <input type="text" id="tableSearch" placeholder="Buscar…" oninput="renderTable()"
           style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border);
-                 border-radius:6px;color:var(--text);font-size:12px;outline:none;width:160px;">
+                 border-radius:6px;color:var(--text);font-size:12px;outline:none;width:150px;">
       </div>
       <div class="table-wrap">
         <table>
@@ -362,9 +379,9 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
       </div>
     </div>
     <div class="card" style="padding:0;overflow:hidden;">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);">
-        <div class="card-title">Cuotas Cobradas por Empleada</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">cantidad de cobros en el período</div>
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);">
+        <div class="card-title">Cuotas por Empleada</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px;" id="empSubLabel">cantidad de cobros en el período</div>
       </div>
       <div style="padding:12px;">
         <div class="emp-list" id="empList"></div>
@@ -391,6 +408,16 @@ let allRows = [], filtRows = [];
 let sortCol = 'Dia', sortAsc = false;
 let page = 1;
 const PG = 50;
+let periodFilter = 'all'; // 'all' or 'hoy'
+
+function setPeriodFilter(val) {
+  periodFilter = val;
+  document.getElementById('toggleAll').classList.toggle('active', val === 'all');
+  document.getElementById('toggleHoy').classList.toggle('active', val === 'hoy');
+  page = 1;
+  renderTable();
+  renderEmpleadas();
+}
 
 // Set today label
 const now = new Date();
@@ -525,7 +552,7 @@ function buildDashboard() {
         <div class="card-title">Comparativo de Cuotas Cobradas por Día</div>
         <div class="card-sub" id="compareSubtitle">cantidad de cobros hoy vs. mismo período mes anterior</div>
         <div class="compare-bar-wrap" id="compareWrap"></div>
-        <div style="margin-top:16px;height:130px;position:relative;">
+        <div style="margin-top:12px;height:100px;position:relative;">
           <canvas id="dailyChart"></canvas>
         </div>
       </div>
@@ -872,7 +899,7 @@ function updateCalendar() {
   while (cur.toISOString().slice(0,10) <= lastDia || cells.length % 7 !== 0) {
     cells.push(cur.toISOString().slice(0,10));
     cur.setDate(cur.getDate() + 1);
-    if (cells.length > 42) break; // safety cap
+    if (cells.length >= 28) break; // show 4 weeks max
   }
 
   // Find max for color intensity
@@ -916,8 +943,13 @@ function sortBy(col) {
 }
 
 function renderTable() {
-  const q = (document.getElementById('tableSearch')?.value||''). toLowerCase();
-  let rows = filtRows.filter(r =>
+  const q = (document.getElementById('tableSearch')?.value||'').toLowerCase();
+  const todayStr = new Date().toISOString().slice(0,10);
+  // Apply period filter
+  const baseRows = periodFilter === 'hoy'
+    ? filtRows.filter(r => r.Dia === todayStr)
+    : filtRows;
+  let rows = baseRows.filter(r =>
     !q || r.Alumno.toLowerCase().includes(q) ||
     r.Destino.toLowerCase().includes(q) ||
     r.Sucursal.toLowerCase().includes(q) ||
@@ -945,7 +977,8 @@ function renderTable() {
   }).join('') : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Sin resultados</td></tr>`;
 
   const lbl = document.getElementById('tableSubLabel');
-  if (lbl) lbl.textContent = `${tot.toLocaleString('es-AR')} cobros — total: ${fmt(rows.reduce((s,r)=>s+r.Subtotal,0))}`;
+  const todayCtx = periodFilter === 'hoy' ? ' (solo hoy)' : '';
+  if (lbl) lbl.textContent = `${tot.toLocaleString('es-AR')} cobros${todayCtx} — total: ${fmt(rows.reduce((s,r)=>s+r.Subtotal,0))}`;
   document.getElementById('pageInfo').textContent = `${(page-1)*PG+1}–${Math.min(page*PG,tot)} de ${tot}`;
 
   const pg = document.getElementById('pagBtns');
@@ -971,8 +1004,17 @@ function renderTable() {
 // EMPLEADAS
 // ════════════════════════════════════════════════
 function renderEmpleadas() {
+  const todayStr = new Date().toISOString().slice(0,10);
+  const sourceRows = periodFilter === 'hoy'
+    ? filtRows.filter(r => r.Dia === todayStr)
+    : filtRows;
+  // Update emp subtitle
+  const empSub = document.getElementById('empSubLabel');
+  if (empSub) empSub.textContent = periodFilter === 'hoy'
+    ? 'cobros de hoy (' + fmtDate(todayStr) + ')'
+    : 'cantidad de cobros en el período';
   const byEmp = {};
-  filtRows.forEach(r => { byEmp[r.Personal] = (byEmp[r.Personal]||0) + 1; });
+  sourceRows.forEach(r => { byEmp[r.Personal] = (byEmp[r.Personal]||0) + 1; });
   const sorted = Object.entries(byEmp).sort((a,b)=>b[1]-a[1]);
   const list = document.getElementById('empList');
   list.innerHTML = sorted.map(([name, count], i) => {
