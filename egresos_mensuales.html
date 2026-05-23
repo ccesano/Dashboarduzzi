@@ -3,133 +3,126 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Uzzi College — Egresos Diarios</title>
+<title>Uzzi College — Egresos Mensuales</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 :root {
-  --bg:#0d0f14;--sidebar:#111318;--surface:#161920;--surface2:#1c1f28;
-  --border:#252830;--border2:#2e3240;--accent:#e8c547;--green:#22c55e;
-  --red:#ef4444;--blue:#3b82f6;--orange:#f97316;--purple:#a855f7;
-  --text:#f1f3f9;--muted:#6b7280;--muted2:#4b5563;--sidebar-w:220px;
+  --bg:#0d0f14; --sidebar:#111318; --surface:#161920; --surface2:#1c1f28;
+  --border:#252830; --border2:#2e3240; --accent:#e8c547; --green:#22c55e;
+  --red:#ef4444; --blue:#3b82f6; --orange:#f97316; --purple:#a855f7;
+  --text:#f1f3f9; --muted:#6b7280; --muted2:#4b5563; --sidebar-w:220px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:13px;display:flex;}
+
 .sidebar{width:var(--sidebar-w);flex-shrink:0;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;}
 .sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid var(--border);}
 .sidebar-logo img{width:100%;max-height:60px;object-fit:contain;object-position:left;}
 .sidebar-section-label{padding:18px 16px 6px;font-size:10px;font-weight:600;letter-spacing:1px;color:var(--muted2);text-transform:uppercase;}
 .nav-item{display:flex;align-items:center;gap:10px;padding:8px 16px;margin:1px 8px;border-radius:7px;cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:500;transition:all .15s;text-decoration:none;}
 .nav-item:hover{background:var(--surface2);color:var(--text);}
-.nav-item.active{background:rgba(232,197,71,.1);color:var(--accent);}
+.nav-item.active{background:rgba(239,68,68,.1);color:var(--red);}
 .nav-item .icon{font-size:14px;width:18px;text-align:center;flex-shrink:0;}
 .nav-sub{display:flex;align-items:center;gap:10px;padding:6px 16px 6px 44px;margin:1px 8px;border-radius:7px;cursor:pointer;color:var(--muted);font-size:12px;transition:all .15s;text-decoration:none;}
 .nav-sub:hover{background:var(--surface2);color:var(--text);}
 .nav-sub.active{color:var(--accent);background:rgba(232,197,71,.08);}
+
 .main{flex:1;display:flex;flex-direction:column;height:100vh;overflow-y:auto;}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;flex-shrink:0;background:var(--sidebar);border-bottom:1px solid var(--border);}
 .topbar-title{font-size:14px;font-weight:600;}
 .topbar-right{display:flex;align-items:center;gap:10px;}
-.topbar-date{font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;}
-.upload-btn{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:7px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s;}
-.upload-btn:hover{background:rgba(239,68,68,.18);}
+.upload-btn{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:7px;background:rgba(232,197,71,.1);border:1px solid rgba(232,197,71,.25);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s;}
+.upload-btn:hover{background:rgba(232,197,71,.18);}
 #fileInput{display:none;}
+.topbar-date{font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;}
 .privacy-btn{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:7px;background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s;}
 .privacy-btn.active{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:var(--red);}
 .privacy-mask{filter:blur(6px);user-select:none;transition:filter .2s;}
+
 .content{padding:20px 24px 8px;display:flex;flex-direction:column;gap:16px;}
 .section-label{font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);margin-bottom:-8px;}
+
 .filter-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .filter-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);font-size:12px;color:var(--muted);}
 .filter-chip label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted2);}
-.filter-chip select,.filter-chip input[type=date]{background:transparent;border:none;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none;cursor:pointer;color-scheme:dark;}
+.filter-chip select{background:transparent;border:none;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none;cursor:pointer;}
 .filter-spacer{flex:1;}
 .clear-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;}
 .clear-btn:hover{color:var(--text);}
+
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
 .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
 .kpi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
 .kpi-title{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.4px;}
 .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.dot-green{background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.5);}
+.dot-red{background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.5);}
 .dot-amber{background:var(--accent);box-shadow:0 0 6px rgba(232,197,71,.5);}
 .dot-red{background:var(--red);box-shadow:0 0 6px rgba(239,68,68,.5);}
 .dot-blue{background:var(--blue);box-shadow:0 0 6px rgba(59,130,246,.5);}
 .kpi-value{font-size:22px;font-weight:700;line-height:1;letter-spacing:-.5px;}
 .kpi-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
 .kpi-status{font-size:10.5px;display:flex;align-items:center;gap:5px;}
-.kpi-status.red{color:var(--red);}
+.kpi-status.green{color:var(--green);}
 .kpi-status.amber{color:var(--accent);}
 .kpi-status.blue{color:var(--blue);}
 .kpi-status.muted{color:var(--muted);}
 .kpi-sub{font-size:10.5px;color:var(--muted2);}
-.mid-row{display:grid;grid-template-columns:1fr 260px;gap:12px;}
+
+.charts-row{display:grid;grid-template-columns:1fr 320px;gap:12px;}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
 .card-title{font-size:12px;font-weight:600;margin-bottom:4px;}
 .card-sub{font-size:11px;color:var(--muted);margin-bottom:14px;}
-.compare-row{display:flex;align-items:center;gap:10px;}
-.compare-label{font-size:12px;color:var(--muted);min-width:90px;}
-.compare-count{font-size:12px;font-weight:600;min-width:70px;}
+
+/* Monthly table */
+.month-table-wrap{overflow-x:auto;}
+.month-table{width:100%;border-collapse:collapse;}
+.month-table th{padding:8px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+.month-table th:hover{color:var(--text);}
+.month-table th.sorted{color:var(--accent);}
+.month-table tbody tr{border-bottom:1px solid rgba(37,40,48,.6);transition:background .1s;}
+.month-table tbody tr:hover{background:rgba(255,255,255,.025);}
+.month-table tbody tr.highlight{background:rgba(232,197,71,.05);border-left:2px solid var(--accent);}
+.month-table td{padding:10px 14px;font-size:13px;}
+.month-table td.num{font-family:'DM Mono',monospace;text-align:right;}
+.month-table td.amt{font-family:'DM Mono',monospace;text-align:right;color:var(--accent);font-weight:600;}
+.month-table td.muted{color:var(--muted);}
+.month-badge{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:rgba(239,68,68,.1);color:var(--red);}
+
+/* Compare bars */
+.compare-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.compare-label{font-size:12px;color:var(--muted);min-width:80px;}
+.compare-count{font-size:12px;font-weight:600;min-width:90px;font-family:'DM Mono',monospace;}
 .bar-track{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;}
 .bar-fill{height:100%;border-radius:4px;transition:width .6s ease;}
-.compare-delta{font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px;white-space:nowrap;}
+.delta-badge{font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px;white-space:nowrap;}
 .delta-up{background:rgba(34,197,94,.15);color:var(--green);}
 .delta-down{background:rgba(239,68,68,.15);color:var(--red);}
-/* Destino breakdown */
-.dest-grid{display:flex;flex-direction:column;gap:5px;max-height:260px;overflow-y:auto;}
-.dest-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(37,40,48,.5);}
-.dest-row:last-child{border-bottom:none;}
-.dest-name{flex:1;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.dest-amt{font-family:'DM Mono',monospace;font-size:11.5px;font-weight:600;color:var(--red);}
-.dest-pct{font-size:10.5px;color:var(--muted2);min-width:36px;text-align:right;font-family:'DM Mono',monospace;}
-/* Table */
-.bot-row{display:grid;grid-template-columns:1fr 260px;gap:12px;padding:0 24px 80px;min-height:520px;}
-.table-wrap{overflow-x:auto;overflow-y:auto;max-height:340px;}
-table{width:100%;border-collapse:collapse;}
-thead{position:sticky;top:0;z-index:1;}
-thead th{padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
-thead th:hover{color:var(--text);}
-thead th.sorted{color:var(--red);}
-tbody tr{border-bottom:1px solid rgba(37,40,48,.7);transition:background .1s;}
-tbody tr:hover{background:rgba(255,255,255,.02);}
-td{padding:7px 12px;font-size:12px;white-space:nowrap;}
-td.mono{font-family:'DM Mono',monospace;}
-td.amt{font-family:'DM Mono',monospace;text-align:right;color:var(--red);font-weight:600;}
-.suc-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;}
-.suc-alvarado{background:rgba(59,130,246,.15);color:#60a5fa;}
-.suc-caseros{background:rgba(168,85,247,.15);color:#c084fc;}
-.suc-espana{background:rgba(34,197,94,.15);color:#4ade80;}
-.suc-doris{background:rgba(249,115,22,.15);color:#fb923c;}
-.pag-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);flex-shrink:0;background:var(--surface);}
-.pag-btns{display:flex;gap:3px;}
-.pag-btn{padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;}
-.pag-btn:hover{border-color:var(--red);color:var(--red);}
-.pag-btn.active{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.3);color:var(--red);}
-.pag-btn:disabled{opacity:.3;cursor:default;}
-/* Destino ranking */
-.dest-rank-list{display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:380px;}
-.dest-rank-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;background:var(--surface2);}
-.dest-rank-idx{font-size:10px;color:var(--muted2);font-family:'DM Mono',monospace;min-width:16px;text-align:center;}
-.dest-rank-name{flex:1;font-size:11.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.dest-rank-amt{font-size:12px;font-weight:700;font-family:'DM Mono',monospace;color:var(--red);}
-.toggle-period{display:flex;gap:0;border:1px solid var(--border2);border-radius:6px;overflow:hidden;}
-.toggle-period-btn{padding:4px 12px;background:transparent;border:none;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s;white-space:nowrap;}
-.toggle-period-btn+.toggle-period-btn{border-left:1px solid var(--border2);}
-.toggle-period-btn.active{background:rgba(239,68,68,.12);color:var(--red);}
+
+/* Suc breakdown */
+.suc-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);}
+.suc-row:last-child{border-bottom:none;}
+.suc-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.suc-name{flex:1;font-size:12.5px;}
+.suc-amt{font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--red);}
+.suc-pct{font-size:11px;color:var(--muted2);min-width:38px;text-align:right;font-family:'DM Mono',monospace;}
+
 .empty-state{text-align:center;padding:40px;color:var(--muted);}
 .empty-state .big{font-size:28px;display:block;margin-bottom:8px;}
 .loading{display:none;position:fixed;inset:0;z-index:999;background:rgba(13,15,20,.8);backdrop-filter:blur(6px);align-items:center;justify-content:center;}
 .loading.show{display:flex;}
-.spinner{width:32px;height:32px;border:2px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:spin .65s linear infinite;}
+.spinner{width:32px;height:32px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .65s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 </style>
 </head>
 <body>
+
 <div class="loading" id="loading"><div class="spinner"></div></div>
 
 <!-- SIDEBAR -->
@@ -141,14 +134,15 @@ td.amt{font-family:'DM Mono',monospace;text-align:right;color:var(--red);font-we
     <span class="icon">💰</span> Ingresos <span style="margin-left:auto;font-size:10px;" id="arrow-ingresos">▼</span>
   </div>
   <div id="nav-ingresos" style="display:none;">
-    <a class="nav-sub" href="ingresos_diarios.html">Ingresos Diarios</a>
-    <a class="nav-sub" href="ingresos_mensuales.html">Ingresos Mensuales</a>
+  <a class="nav-sub" href="ingresos_diarios.html">Ingresos Diarios</a>
+  <a class="nav-sub" href="ingresos_mensuales.html">Ingresos Mensuales</a>
+  <div class="nav-item" onclick="toggleNav('egresos')" style="cursor:pointer;">
+    <span class="icon">📤</span> Egresos <span style="margin-left:auto;font-size:10px;" id="arrow-egresos">▼</span>
   </div>
-  <div class="nav-item active" style="cursor:default;">
-    <span class="icon">📤</span> Egresos <span style="margin-left:auto;font-size:10px;">▲</span>
+  <div id="nav-egresos" style="display:none;">
+    <a class="nav-sub" href="egresos_diarios.html">Egresos Diarios</a>
+    <a class="nav-sub" href="egresos_mensuales.html">Egresos Mensuales</a>
   </div>
-  <a class="nav-sub active" href="egresos_diarios.html">Egresos Diarios</a>
-  <a class="nav-sub" href="egresos_mensuales.html">Egresos Mensuales</a>
   <a class="nav-item" href="resultados.html"><span class="icon">📊</span> Resultados</a>
   <a class="nav-item" href="flujo_caja.html"><span class="icon">💸</span> Flujo de Caja</a>
   <a class="nav-item" href="balance.html"><span class="icon">⚖️</span> Balance</a>
@@ -160,133 +154,67 @@ td.amt{font-family:'DM Mono',monospace;text-align:right;color:var(--red);font-we
 <!-- MAIN -->
 <div class="main">
   <div class="topbar">
-    <div class="topbar-title">☰ &nbsp; Egresos Diarios</div>
+    <div class="topbar-title">☰ &nbsp; Egresos Mensuales</div>
     <div class="topbar-right">
       <span class="topbar-date" id="todayLabel">—</span>
       <span id="fileLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
-      <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()">👁 Modo privado</button>
+      <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()" title="Ocultar montos">👁 Modo privado</button>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📤 Cargar Excel</button>
+      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📂 Cargar / Actualizar</button>
     </div>
   </div>
 
   <div class="content" id="contentArea">
-    <div class="empty-state" id="emptyMsg">
+    <div class="empty-state">
       <span class="big">📂</span>
-      Cargá el archivo de exportación de Caja para ver los egresos<br>
-      <span style="font-size:11px;color:var(--muted2);">El archivo debe tener la hoja "Pagos" — usá el botón arriba a la derecha</span>
-    </div>
-  </div>
-
-  <!-- BOTTOM ROW static -->
-  <div class="bot-row" id="botRow" style="display:none;">
-    <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;">
-      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div>
-            <div class="card-title">Detalle de Pagos</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:1px;" id="tableSubLabel">—</div>
-          </div>
-          <div class="toggle-period">
-            <button class="toggle-period-btn active" id="toggleAll" onclick="setPeriodFilter('all')">Todo el período</button>
-            <button class="toggle-period-btn" id="toggleHoy" onclick="setPeriodFilter('hoy')">Solo hoy</button>
-          </div>
-        </div>
-        <input type="text" id="tableSearch" placeholder="Buscar…" oninput="renderTable()"
-          style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none;width:150px;">
-      </div>
-      <div class="table-wrap" style="flex:1;">
-        <table>
-          <thead>
-            <tr>
-              <th onclick="sortBy('Dia')"          data-col="Dia">Fecha</th>
-              <th onclick="sortBy('Sucursal')"     data-col="Sucursal">Sucursal</th>
-              <th onclick="sortBy('Destino')"      data-col="Destino">Destino</th>
-              <th onclick="sortBy('Personal')"     data-col="Personal">Personal</th>
-              <th onclick="sortBy('Observaciones')" data-col="Observaciones">Observaciones</th>
-              <th onclick="sortBy('Monto')"        data-col="Monto" style="text-align:right;">Monto</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody"></tbody>
-        </table>
-      </div>
-      <div class="pag-row">
-        <span id="pageInfo">—</span>
-        <div class="pag-btns" id="pagBtns"></div>
-      </div>
-    </div>
-    <div class="card" style="padding:0;overflow:hidden;">
-      <div style="padding:10px 16px;border-bottom:1px solid var(--border);">
-        <div class="card-title">Top Destinos</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:1px;" id="rankSubLabel">por monto en el período</div>
-      </div>
-      <div style="padding:12px;">
-        <div class="dest-rank-list" id="destRankList"></div>
-      </div>
+      Cargá el archivo de exportación de Caja para comenzar<br>
+      <span style="font-size:11px;color:var(--muted2);">Usá el botón "Cargar Excel" arriba a la derecha</span>
     </div>
   </div>
 </div>
 
 <script>
-const cfg       = JSON.parse(localStorage.getItem('dashboardConfig') || '{}');
-const SUC_NAMES = cfg.sucursalNames  || {};
-const SUC_ACTIVE= cfg.sucursalActive || {};
-const EG_EXCL   = cfg.egresosExcluidos || [];
-const PATTERNS  = cfg.patterns || ['Saldo de Caja'];
+const cfg = JSON.parse(localStorage.getItem('dashboardConfig') || '{}');
+const SUC_NAMES  = cfg.sucursalNames  || {};
+const SUC_ACTIVE = cfg.sucursalActive || {};
+const COND_NAMES = cfg.conditionNames || {};
+const SUC_COLORS = { Alvarado:'#3b82f6', Caseros:'#a855f7', España:'#22c55e', Doris:'#f97316' };
+const PALETTE    = ['#e8c547','#3b82f6','#22c55e','#a855f7','#f97316','#ef4444','#06b6d4'];
+const MNAMES     = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MSHORT     = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-const SUC_COLORS = {Alvarado:'#3b82f6',Caseros:'#a855f7',España:'#22c55e',Doris:'#f97316'};
-const PALETTE    = ['#ef4444','#f97316','#e8c547','#3b82f6','#22c55e','#a855f7','#06b6d4'];
-const DAYS   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-const MSHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+let allRows = [], lastFileName = '';
+let filtRows = [];
+let sortCol = 'mes', sortAsc = false;
+let barChartInst = null, donutChartInst = null, condChartInst = null;
+let privacyMode = false;
 
-let allRows = [], filtRows = [], lastFileName = '';
-let sortCol = 'Dia', sortAsc = false;
-let page = 1; const PG = 50;
-let periodFilter = 'all';
-let privacyMode  = false;
-let barChartInst = null;
-
-// ── UTILS ─────────────────────────────────
-function fmt(n){return '$'+Math.round(n).toLocaleString('es-AR');}
-function fmtShort(n){
-  if(n>=1e9)return '$'+(n/1e9).toFixed(1)+'B';
-  if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';
-  if(n>=1e3)return '$'+(n/1e3).toFixed(0)+'K';
-  return '$'+Math.round(n);
-}
-function fmtDate(s){
-  if(!s)return '—';
-  const[y,m,d]=s.split('-');
-  const mn=['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  return d+' '+mn[parseInt(m)]+' '+y;
-}
-function fmtDateShort(s){const[y,m,d]=s.split('-');return d+'/'+m;}
-function isExcluded(destino){
-  if(EG_EXCL.includes(destino)) return true;
-  return PATTERNS.some(p => destino.includes(p));
-}
-
-// ── PRIVACY ───────────────────────────────
-function togglePrivacy(){
+// ── PRIVACY ──────────────────────────────────────
+function togglePrivacy() {
   privacyMode = !privacyMode;
   const btn = document.getElementById('privacyBtn');
   btn.textContent = privacyMode ? '🙈 Mostrar montos' : '👁 Modo privado';
   btn.classList.toggle('active', privacyMode);
-  document.querySelectorAll('.kpi-value,.amt,.dest-amt,.dest-rank-amt,.compare-count')
+  applyPrivacy();
+}
+function applyPrivacy() {
+  document.querySelectorAll('.kpi-value, .amt, .suc-amt, .compare-count, .privacy-amt')
     .forEach(el => el.classList.toggle('privacy-mask', privacyMode));
 }
 
-// ── SIDEBAR ───────────────────────────────
-function toggleNav(id){
-  const el=document.getElementById('nav-'+id);
-  const ar=document.getElementById('arrow-'+id);
-  if(!el)return;
-  const open=el.style.display==='block';
-  el.style.display=open?'none':'block';
-  if(ar)ar.textContent=open?'▼':'▲';
+// ── SIDEBAR ───────────────────────────────────────
+function toggleNav(id) {
+  const el = document.getElementById('nav-' + id);
+  const ar = document.getElementById('arrow-' + id);
+  if (!el) return;
+  const open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  if (ar) ar.textContent = open ? '▼' : '▲';
 }
 
-// ── TODAY / INIT ──────────────────────────
+// ── TODAY LABEL ───────────────────────────────────
+const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
   // ── Cargar datos desde sessionStorage ──────────────────────────────────────
   function loadFromSession(sheet) {
@@ -300,445 +228,477 @@ function toggleNav(id){
              file: data.file || '', ts: data.ts || 0 };
   }
 
-document.addEventListener('DOMContentLoaded',()=>{
-  const now=new Date();
-  const lbl=document.getElementById('todayLabel');
-  if(lbl) lbl.textContent=DAYS[now.getDay()]+' '+now.getDate()+' '+MSHORT[now.getMonth()]+' '+now.getFullYear();
-  try {
-    const _d = loadFromSession('pagos');
-    if (!_d) return;
-    allRows = _d.rows;
-    lastFileName = _d.file;
-    const mins = Math.round((Date.now() - _d.ts) / 60000);
-    const ago = mins<1?'recién':mins<60?'hace '+mins+'m':'hace '+Math.round(mins/60)+'h';
-    const fl = document.getElementById('fileLabel');
-    if (fl) fl.textContent = lastFileName + ' · ' + ago;
+document.addEventListener('DOMContentLoaded', () => {
+  const now = new Date();
+  const lbl = document.getElementById('todayLabel');
+  if (lbl) lbl.textContent = DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS_SHORT[now.getMonth()] + ' ' + now.getFullYear();
+
+  // Auto-load from localStorage
+  try {    // Cargar datos desde dashboardAllData (cargado por index.html)
+    const _raw = localStorage.getItem('dashboardAllData');
+    if (!_raw) return;
+    const _data = JSON.parse(_raw);
+    const _rows = _data.cobranzas;
+    if (!_rows?.length) return;
+    allRows = _rows.map(r => ({{...r, Mes: r.Mes || (r.Dia ? r.Dia.slice(0,7) : '')}})).filter(r => r.Dia);
+    lastFileName = _data.file || 'archivo';
+    const _mins = Math.round((Date.now() - (_data.ts||0)) / 60000);
+    const _ago  = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
+    const _fl   = document.getElementById('fileLabel');
+    if (_fl) _fl.textContent = lastFileName + ' · ' + _ago;
     buildDashboard();
-  } catch(e) { console.warn('Error cargando datos:', e); }
+    } catch(e) { console.warn(e); }
 });
 
-// ── FILE LOAD ─────────────────────────────
-document.getElementById('fileInput').addEventListener('change',e=>{
-  const file=e.target.files[0]; if(!file)return;
+// ── FILE LOAD ─────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
   document.getElementById('loading').classList.add('show');
-  lastFileName=file.name;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    try{
-      const wb=XLSX.read(ev.target.result,{type:'array'});
+  lastFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
       parseWorkbook(wb);
-    }catch(err){alert('Error: '+err.message);}
+    } catch(err) { alert('Error: ' + err.message); }
     document.getElementById('loading').classList.remove('show');
   };
   reader.readAsArrayBuffer(file);
 });
 
-function parseDate(s){
-  const m=String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if(!m)return null;
+function parseDate(s) {
+  const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return null;
   return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
 }
 
-function parseWorkbook(wb){
-  // Parse Pagos sheet
-  const sh=wb.Sheets['Pagos'];
-  if(!sh){alert('Hoja "Pagos" no encontrada');return;}
-  const raw=XLSX.utils.sheet_to_json(sh,{header:1,defval:''});
-  let hdrIdx=-1;
-  for(let i=0;i<Math.min(10,raw.length);i++){
-    if(String(raw[i][0]||'').trim()==='Fecha'){hdrIdx=i;break;}
+function parseWorkbook(wb) {
+  const sh = wb.Sheets['Cobranzas'];
+  if (!sh) { alert('Hoja "Cobranzas" no encontrada'); return; }
+  const raw = XLSX.utils.sheet_to_json(sh, { header: 1, defval: '' });
+  let hdrIdx = -1;
+  for (let i = 0; i < Math.min(10, raw.length); i++) {
+    if (String(raw[i][0] || '').trim() === 'Fecha') { hdrIdx = i; break; }
   }
-  if(hdrIdx<0){alert('No se encontró la fila "Fecha" en la hoja Pagos.');return;}
-
-  // Also need to store cobranzas rows for the shared localStorage
-  // We reuse whatever is already there and add egreso rows
-  allRows=[];
-  for(let i=hdrIdx+1;i<raw.length;i++){
-    const r=raw[i];
-    if(!r||!r[0]||String(r[0]).trim()==='')continue;
-    const dia=parseDate(String(r[0]).trim()); if(!dia)continue;
-    const monto=parseFloat(String(r[7]||'0').replace(',','.'));
-    if(isNaN(monto)||monto<=0)continue;
-    const suc=String(r[2]||'').trim();
-    if(!suc||suc==='Sucursal')continue;
-    if(SUC_ACTIVE[suc]===false)continue;
-    const destino=String(r[6]||'').trim();
-    if(isExcluded(destino))continue;
-    allRows.push({
-      Dia:dia, Mes:dia.slice(0,7),
-      Sucursal:suc,
-      Personal:String(r[3]||'').trim(),
-      Observaciones:String(r[4]||'').trim(),
-      Destino:destino,
-      Monto:monto
-    });
+  if (hdrIdx < 0) { alert('No se encontró la fila "Fecha". ¿Está el archivo desmergeado?'); return; }
+  allRows = [];
+  for (let i = hdrIdx + 1; i < raw.length; i++) {
+    const r = raw[i];
+    if (!r || !r[0] || String(r[0]).trim() === '') continue;
+    const dia = parseDate(String(r[0]).trim()); if (!dia) continue;
+    const sub = parseFloat(String(r[8] || '0').replace(',', '.'));
+    if (isNaN(sub) || sub < 0) continue;
+    const suc = String(r[2] || '').trim();
+    if (!suc || suc === 'Sucursal') continue;
+    if (SUC_ACTIVE[suc] === false) continue;
+    allRows.push({ Dia: dia, Mes: dia.slice(0,7), Sucursal: suc,
+      Personal: String(r[3]||'').trim(), CondicionVenta: String(r[4]||'').trim(),
+      Destino: String(r[6]||'').trim(), Alumno: String(r[7]||'').trim(), Subtotal: sub });
   }
-  if(!allRows.length){alert('No se encontraron registros de egresos válidos.');return;}
-
-  // Save egresos data
-  try{
-    localStorage.setItem('dashboardEgresosData',JSON.stringify({rows:allRows,file:lastFileName,ts:Date.now()}));
-  }catch(e){}
-
-  // Also parse Cobranzas and save dashboardData so other screens work too
-  const shCob=wb.Sheets['Cobranzas'];
-  if(shCob){
-    try{
-      const rawCob=XLSX.utils.sheet_to_json(shCob,{header:1,defval:''});
-      let hdrCob=-1;
-      for(let i=0;i<Math.min(10,rawCob.length);i++){
-        if(String(rawCob[i][0]||'').trim()==='Fecha'){hdrCob=i;break;}
-      }
-      if(hdrCob>=0){
-        const cobRows=[];
-        for(let i=hdrCob+1;i<rawCob.length;i++){
-          const r=rawCob[i];
-          if(!r||!r[0]||String(r[0]).trim()==='')continue;
-          const dia=parseDate(String(r[0]).trim());if(!dia)continue;
-          const sub=parseFloat(String(r[8]||'0').replace(',','.'));
-          if(isNaN(sub)||sub<0)continue;
-          const suc=String(r[2]||'').trim();
-          if(!suc||suc==='Sucursal')continue;
-          cobRows.push({Dia:dia,Mes:dia.slice(0,7),Sucursal:suc,
-            Personal:String(r[3]||'').trim(),CondicionVenta:String(r[4]||'').trim(),
-            Destino:String(r[6]||'').trim(),Alumno:String(r[7]||'').trim(),Subtotal:sub});
-        }
-        if(cobRows.length){
-          localStorage.setItem('dashboardData',JSON.stringify({rows:cobRows,file:lastFileName,ts:Date.now()}));
-        }
-      }
-    }catch(e){console.warn('Error parsing Cobranzas:',e);}
-  }
-
-  const fl=document.getElementById('fileLabel');
-  if(fl) fl.textContent=lastFileName+' · recién cargado';
+  if (!allRows.length) { alert('No se encontraron registros.'); return; }
+  try {
+    localStorage.setItem('dashboardData', JSON.stringify({ rows: allRows, file: lastFileName, ts: Date.now() }));
+  } catch(e) {}
+  const fileLbl = document.getElementById('fileLabel');
+  if (fileLbl) fileLbl.textContent = lastFileName + ' · recién cargado';
   buildDashboard();
 }
 
-// ── BUILD ─────────────────────────────────
-function buildDashboard(){
-  const sucs  =[...new Set(allRows.map(r=>r.Sucursal))].sort();
-  const dests =[...new Set(allRows.map(r=>r.Destino))].sort();
-  const meses =[...new Set(allRows.map(r=>r.Dia.slice(0,7)))].sort();
-  const dias  =allRows.map(r=>r.Dia).sort();
+// ── BUILD ─────────────────────────────────────────
+function buildDashboard() {
+  const sucs  = [...new Set(allRows.map(r => r.Sucursal))].sort();
+  const conds = [...new Set(allRows.map(r => r.CondicionVenta))].sort();
+  const dests = [...new Set(allRows.map(r => r.Destino))].sort();
 
-  document.getElementById('contentArea').innerHTML=`
+  document.getElementById('contentArea').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div class="section-label">Egresos Diarios: <span id="dateRangeLabel" style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500;"></span></div>
+      <div class="section-label">Egresos Mensuales: <span id="rangeLabel" style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500;"></span></div>
       <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;" id="txCount">—</div>
     </div>
 
     <div class="filter-row">
-      <div class="filter-chip"><label>Mes</label><select id="fMes" onchange="applyFilters('mes')"><option value="all">Todos</option></select></div>
-      <div class="filter-chip"><label>Sucursal</label><select id="fSuc" onchange="applyFilters('suc')"><option value="all">Todas</option></select></div>
-      <div class="filter-chip"><label>Destino</label><select id="fDest" onchange="applyFilters('dest')" style="max-width:200px;"><option value="all">Todos</option></select></div>
-      <div class="filter-chip"><label>Desde</label><input type="date" id="fDesde" onchange="applyFilters('fecha')"></div>
-      <div class="filter-chip"><label>Hasta</label><input type="date" id="fHasta" onchange="applyFilters('fecha')"></div>
+      <div class="filter-chip"><label>Año</label>
+        <select id="fAnio" onchange="applyFilters()"><option value="all">Todos</option></select></div>
+      <div class="filter-chip"><label>Sucursal</label>
+        <select id="fSuc" onchange="applyFilters()"><option value="all">Todas</option>
+        ${sucs.map(s => `<option value="${s}">${SUC_NAMES[s]||s}</option>`).join('')}
+        </select></div>
+      <div class="filter-chip"><label>Concepto</label>
+        <select id="fDest" onchange="applyFilters()" style="max-width:160px;"><option value="all">Todos</option>
+        ${dests.map(d => `<option value="${d}">${d||'(Sin concepto)'}</option>`).join('')}
+        </select></div>
+      <div class="filter-chip"><label>Cond. Pago</label>
+        <select id="fCond" onchange="applyFilters()"><option value="all">Todas</option>
+        ${conds.map(c => `<option value="${c}">${COND_NAMES[c]||c||'(Sin condición)'}</option>`).join('')}
+        </select></div>
       <div class="filter-spacer"></div>
       <button class="clear-btn" onclick="clearFilters()">✕ Limpiar</button>
     </div>
 
-    <div class="section-label">Resumen de Egresos Diarios</div>
+    <div class="section-label">Resumen de Egresos</div>
     <div class="kpi-grid" id="kpiGrid"></div>
 
-    <div class="mid-row">
+    <div class="charts-row">
       <div class="card">
-        <div class="card-title">Egresos por Día</div>
-        <div class="card-sub" id="barSub">monto total de pagos por fecha</div>
-        <div style="height:120px;position:relative;"><canvas id="barChart"></canvas></div>
-        <div style="margin-top:12px;" id="compareWrap"></div>
+        <div class="card-title">Ingresos por Mes</div>
+        <div class="card-sub" id="barSub">monto total de pagos por mes</div>
+        <div style="height:200px;position:relative;"><canvas id="barChart"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-title">Por Destino</div>
-        <div class="card-sub">top destinos del período</div>
-        <div class="dest-grid" id="destGrid"></div>
+        <div class="card-title">Por Sucursal</div>
+        <div class="card-sub">por sucursal</div>
+        <div id="sucBreakdown"></div>
       </div>
-    </div>`;
+    </div>
 
-  document.getElementById('botRow').style.display='grid';
-  initFilters();
+    <div class="charts-row" style="grid-template-columns:1fr 1fr;">
+      <div class="card">
+        <div class="card-title">Comparativo Año vs Año</div>
+        <div class="card-sub" id="yySubtitle">mismo mes — año actual vs anterior</div>
+        <div id="yyWrap"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Por Condición de Pago</div>
+        <div class="card-sub">distribución del período</div>
+        <div style="height:160px;position:relative;"><canvas id="condChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="section-label">Detalle Mensual</div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="month-table-wrap">
+        <table class="month-table">
+          <thead>
+            <tr>
+              <th onclick="sortTable('mes')"       data-col="mes">Mes</th>
+              <th onclick="sortTable('cobros')"    data-col="cobros" style="text-align:right;">Cobros</th>
+              <th onclick="sortTable('destinos')"  data-col="destinos" style="text-align:right;">Destinos</th>
+              <th onclick="sortTable('total')"     data-col="total" style="text-align:right;">Total</th>
+              <th onclick="sortTable('promDia')"   data-col="promDia" style="text-align:right;">Prom/Día</th>
+              <th onclick="sortTable('vsAnterior')" data-col="vsAnterior" style="text-align:right;">vs Mes Ant.</th>
+              <th onclick="sortTable('vsAnioAnt')" data-col="vsAnioAnt" style="text-align:right;">vs Año Ant.</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Populate year filter
+  const years = [...new Set(allRows.map(r => r.Mes.slice(0,4)))].sort();
+  const fAnio = document.getElementById('fAnio');
+  years.forEach(y => { const o = document.createElement('option'); o.value = y; o.textContent = y; fAnio.appendChild(o); });
+
   applyFilters();
 }
 
-// ── FILTERS ───────────────────────────────
-function initFilters(){
-  const mNames=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const meses=[...new Set(allRows.map(r=>r.Dia.slice(0,7)))].sort();
-  refreshSelect('fMes',meses,v=>{const[y,m]=v.split('-');return mNames[parseInt(m)]+' '+y;},false);
-  const sucs=[...new Set(allRows.map(r=>r.Sucursal))].sort();
-  refreshSelect('fSuc',sucs,v=>SUC_NAMES[v]||v,false);
-  const dias=allRows.map(r=>r.Dia).sort();
-  document.getElementById('fDesde').value=dias[0];
-  document.getElementById('fHasta').value=dias[dias.length-1];
-}
+// ── FILTERS ───────────────────────────────────────
+function applyFilters() {
+  const anio = document.getElementById('fAnio')?.value || 'all';
+  const suc  = document.getElementById('fSuc')?.value  || 'all';
+  const dest = document.getElementById('fDest')?.value || 'all';
+  const cond = document.getElementById('fCond')?.value || 'all';
 
-function refreshSelect(id,values,labelFn,keepCurrent=true){
-  const sel=document.getElementById(id); if(!sel)return;
-  const current=sel.value;
-  const allLabel=id==='fSuc'?'Todas':'Todos';
-  sel.innerHTML=`<option value="all">${allLabel}</option>`;
-  values.forEach(v=>{
-    const o=document.createElement('option');
-    o.value=v===''?'__empty__':v;
-    o.textContent=labelFn(v);
-    sel.appendChild(o);
-  });
-  if(keepCurrent&&current!=='all'&&values.includes(current==='__empty__'?'':current))sel.value=current;
-  else if(!keepCurrent)sel.value='all';
-}
-
-function applyFilters(changedFilter){
-  const mes  =document.getElementById('fMes')?.value||'all';
-  const suc  =document.getElementById('fSuc')?.value||'all';
-  let   dest =document.getElementById('fDest')?.value||'all';
-  let   desde=document.getElementById('fDesde')?.value||'';
-  let   hasta=document.getElementById('fHasta')?.value||'';
-
-  if(changedFilter==='mes'&&mes!=='all'){
-    const[y,m]=mes.split('-').map(Number);
-    desde=`${mes}-01`;
-    hasta=new Date(y,m,0).toISOString().slice(0,10);
-    document.getElementById('fDesde').value=desde;
-    document.getElementById('fHasta').value=hasta;
-  }
-  if(changedFilter==='fecha')document.getElementById('fMes').value='all';
-
-  const baseRows=allRows.filter(r=>{
-    if(mes!=='all'&&!r.Dia.startsWith(mes))return false;
-    if(suc!=='all'&&r.Sucursal!==suc)return false;
-    if(desde&&r.Dia<desde)return false;
-    if(hasta&&r.Dia>hasta)return false;
+  filtRows = allRows.filter(r => {
+    if (anio !== 'all' && !r.Mes.startsWith(anio)) return false;
+    if (suc  !== 'all' && r.Sucursal !== suc)       return false;
+    if (dest !== 'all' && r.Destino  !== dest)       return false;
+    if (cond !== 'all' && r.CondicionVenta !== cond) return false;
     return true;
   });
 
-  const availDests=[...new Set(baseRows.map(r=>r.Destino))].sort();
-  refreshSelect('fDest',availDests,v=>v||'(Sin destino)');
-  const destVal=dest==='__empty__'?'':dest;
-  if(dest!=='all'&&!availDests.includes(destVal)){document.getElementById('fDest').value='all';dest='all';}
-
-  filtRows=baseRows.filter(r=>{
-    if(dest!=='all'&&r.Destino!==destVal)return false;
-    return true;
-  });
-
-  document.getElementById('txCount').textContent=filtRows.length.toLocaleString('es-AR')+' pagos';
+  document.getElementById('txCount').textContent = filtRows.length.toLocaleString('es-AR') + ' transacciones';
   updateKPIs();
   updateBarChart();
-  updateDestGrid();
-  page=1;
+  updateSucBreakdown();
+  updateYYCompare();
+  updateCondChart();
   renderTable();
-  renderDestRank();
 }
 
-function clearFilters(){
-  document.getElementById('fMes').value='all';
-  document.getElementById('fSuc').value='all';
-  document.getElementById('fDest').value='all';
-  const dias=allRows.map(r=>r.Dia).sort();
-  document.getElementById('fDesde').value=dias[0];
-  document.getElementById('fHasta').value=dias[dias.length-1];
+function clearFilters() {
+  ['fAnio','fSuc','fDest','fCond'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = 'all';
+  });
   applyFilters();
 }
 
-// ── KPIs ──────────────────────────────────
-function updateKPIs(){
-  const total=filtRows.reduce((s,r)=>s+r.Monto,0);
-  const dias=[...new Set(filtRows.map(r=>r.Dia))];
-  const byDay={};filtRows.forEach(r=>byDay[r.Dia]=(byDay[r.Dia]||0)+r.Monto);
-  const prom=dias.length?total/dias.length:0;
-  const maxDia=Object.entries(byDay).sort((a,b)=>b[1]-a[1])[0];
-  const todayStr=new Date().toISOString().slice(0,10);
-  const todayTotal=byDay[todayStr]||0;
-  const hasToday=todayStr in byDay;
-
-  document.getElementById('kpiGrid').innerHTML=`
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-title">Total Egresos</div><div class="status-dot dot-red"></div></div>
-      <div class="kpi-value">${fmt(total)}</div>
-      <div class="kpi-bottom"><div class="kpi-status red">● Registrado</div><div class="kpi-sub">${dias.length} días con pagos</div></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-title">Promedio Diario</div><div class="status-dot dot-blue"></div></div>
-      <div class="kpi-value">${fmt(prom)}</div>
-      <div class="kpi-bottom"><div class="kpi-status blue">● Calculado</div><div class="kpi-sub">${dias.length} días con pagos</div></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-title">Mayor Egreso del Día</div><div class="status-dot dot-amber"></div></div>
-      <div class="kpi-value">${maxDia?fmt(maxDia[1]):'$0'}</div>
-      <div class="kpi-bottom"><div class="kpi-status amber">● Máximo</div><div class="kpi-sub">${maxDia?fmtDate(maxDia[0]):'—'}</div></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-title">Egresos de Hoy</div><div class="status-dot ${hasToday?'dot-red':'dot-blue'}"></div></div>
-      <div class="kpi-value" style="${!hasToday?'color:var(--muted)':''}">${fmt(todayTotal)}</div>
-      <div class="kpi-bottom">
-        <div class="kpi-status ${hasToday?'red':'muted'}">● ${hasToday?'Registrado':'Sin datos de hoy'}</div>
-        <div class="kpi-sub">${hasToday?filtRows.filter(r=>r.Dia===todayStr).length+' pagos hoy':'Último: '+fmtDate(dias.sort()[dias.length-1])}</div>
-      </div>
-    </div>`;
-
-  // Date range
-  const sortedDias=dias.sort();
-  if(sortedDias.length)
-    document.getElementById('dateRangeLabel').textContent=fmtDate(sortedDias[0])+' → '+fmtDate(sortedDias[sortedDias.length-1]);
-  if(privacyMode)document.querySelectorAll('.kpi-value').forEach(el=>el.classList.add('privacy-mask'));
+// ── AGG BY MONTH ──────────────────────────────────
+function aggByMonth(rows) {
+  const map = {};
+  rows.forEach(r => {
+    if (!map[r.Mes]) map[r.Mes] = { total:0, cobros:0, alumnos:new Set(), dias:new Set() };
+    map[r.Mes].total   += r.Monto;
+    map[r.Mes].cobros  += 1;
+    // no alumnos in pagos
+    map[r.Mes].dias.add(r.Dia);
+  });
+  return map;
 }
 
-// ── BAR CHART + COMPARE ───────────────────
-function updateBarChart(){
-  const byDay={};
-  filtRows.forEach(r=>byDay[r.Dia]=(byDay[r.Dia]||0)+r.Monto);
-  const labels=Object.keys(byDay).sort();
-  const data=labels.map(d=>byDay[d]);
+// ── KPIs ──────────────────────────────────────────
+function updateKPIs() {
+  const total  = filtRows.reduce((s,r) => s + r.Subtotal, 0);
+  const meses  = [...new Set(filtRows.map(r => r.Mes))].sort();
+  const agg    = aggByMonth(filtRows);
+  const totals = meses.map(m => agg[m].total);
+  const prom   = meses.length ? total / meses.length : 0;
+  const maxMes = meses.reduce((a,b) => agg[a].total > agg[b].total ? a : b, meses[0] || '');
+  const minMes = meses.reduce((a,b) => agg[a].total < agg[b].total ? a : b, meses[0] || '');
 
-  if(barChartInst){barChartInst.destroy();barChartInst=null;}
-  const ctx=document.getElementById('barChart')?.getContext('2d');
-  if(!ctx)return;
+  if (meses.length) {
+    const [sy,sm] = meses[0].split('-').map(Number);
+    const [ey,em] = meses[meses.length-1].split('-').map(Number);
+    document.getElementById('rangeLabel').textContent =
+      MSHORT[sm] + ' ' + sy + ' → ' + MSHORT[em] + ' ' + ey;
+  }
 
-  barChartInst=new Chart(ctx,{
-    type:'bar',
-    data:{labels:labels.map(fmtDateShort),datasets:[{data,backgroundColor:'rgba(239,68,68,0.65)',borderRadius:3,borderWidth:0}]},
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmt(c.raw)}}},
-      scales:{
-        x:{grid:{display:false},ticks:{color:'#4b5563',font:{size:9},maxRotation:45,maxTicksLimit:15}},
-        y:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#4b5563',font:{size:9},callback:v=>fmtShort(v)}}
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-title">Total Egresos</div><div class="status-dot dot-red"></div></div>
+      <div class="kpi-value privacy-amt">${fmt(total)}</div>
+      <div class="kpi-bottom"><div class="kpi-status green">● Registrado</div><div class="kpi-sub">${meses.length} meses</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-title">Promedio Mensual</div><div class="status-dot dot-blue"></div></div>
+      <div class="kpi-value privacy-amt">${fmt(prom)}</div>
+      <div class="kpi-bottom"><div class="kpi-status blue">● Calculado</div><div class="kpi-sub">${meses.length} meses con cobros</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-title">Mayor Mes</div><div class="status-dot dot-amber"></div></div>
+      <div class="kpi-value privacy-amt">${maxMes ? fmt(agg[maxMes].total) : '$0'}</div>
+      <div class="kpi-bottom"><div class="kpi-status amber">● Máximo</div><div class="kpi-sub">${maxMes ? fmtMes(maxMes) : '—'}</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-title">Menor Mes</div><div class="status-dot dot-red"></div></div>
+      <div class="kpi-value privacy-amt">${minMes ? fmt(agg[minMes].total) : '$0'}</div>
+      <div class="kpi-bottom"><div class="kpi-status muted">● Mínimo</div><div class="kpi-sub">${minMes ? fmtMes(minMes) : '—'}</div></div>
+    </div>`;
+  if (privacyMode) applyPrivacy();
+}
+
+// ── BAR CHART ─────────────────────────────────────
+function updateBarChart() {
+  const agg    = aggByMonth(filtRows);
+  const meses  = Object.keys(agg).sort();
+  const data   = meses.map(m => agg[m].total);
+
+  if (barChartInst) { barChartInst.destroy(); barChartInst = null; }
+  const ctx = document.getElementById('barChart')?.getContext('2d');
+  if (!ctx) return;
+
+  const grad = ctx.createLinearGradient(0, 0, 0, 200);
+  grad.addColorStop(0, 'rgba(239,68,68,0.8)');
+  grad.addColorStop(1, 'rgba(239,68,68,0.3)');
+
+  barChartInst = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: meses.map(fmtMesShort),
+      datasets: [{ data, backgroundColor: grad, borderRadius: 5, borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) }}},
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#4b5563', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#4b5563', font: { size: 10 }, callback: v => fmtShort(v) } }
       }
     }
   });
-  document.getElementById('barSub').textContent=labels.length+' días — total: '+fmt(filtRows.reduce((s,r)=>s+r.Monto,0));
+  document.getElementById('barSub').textContent =
+    meses.length + ' meses — total: ' + fmt(filtRows.reduce((s,r)=>s+r.Subtotal,0));
+}
 
-  // Compare mes actual vs mes anterior
-  const wrap=document.getElementById('compareWrap');
-  const meses=[...new Set(filtRows.map(r=>r.Dia.slice(0,7)))].sort();
-  if(meses.length>=2){
-    const curr=meses[meses.length-1];
-    const prev=meses[meses.length-2];
-    const[ry,rm]=curr.split('-').map(Number);
-    const dayOfMonth=parseInt(filtRows.map(r=>r.Dia).filter(d=>d.startsWith(curr)).sort().pop()?.slice(8)||'0');
-    const currTotal=filtRows.filter(r=>r.Dia.startsWith(curr)&&parseInt(r.Dia.slice(8))<=dayOfMonth).reduce((s,r)=>s+r.Monto,0);
-    const prevTotal=filtRows.filter(r=>r.Dia.startsWith(prev)&&parseInt(r.Dia.slice(8))<=dayOfMonth).reduce((s,r)=>s+r.Monto,0);
-    const mnames=['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    const[py,pm]=prev.split('-').map(Number);
-    const maxV=Math.max(currTotal,prevTotal,1);
-    const delta=prevTotal?((currTotal-prevTotal)/prevTotal*100):0;
-    const dc=delta>=0?'delta-down':'delta-up'; // for egresos: up is bad
-    const sign=delta>=0?'+':'';
-    wrap.innerHTML=`
-      <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Acumulado al día ${dayOfMonth} — Monto</div>
-      <div class="compare-row" style="margin-bottom:6px;">
-        <div class="compare-label">${mnames[rm]} ${ry}</div>
-        <div class="compare-count">${fmtShort(currTotal)}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${currTotal/maxV*100}%;background:#ef4444;"></div></div>
-      </div>
-      <div class="compare-row" style="margin-bottom:8px;">
-        <div class="compare-label">${mnames[pm]} ${py}</div>
-        <div class="compare-count">${fmtShort(prevTotal)}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${prevTotal/maxV*100}%;background:#6b7280;"></div></div>
-      </div>
-      <span class="compare-delta ${dc}">${sign}${delta.toFixed(1)}% (${sign}${fmtShort(currTotal-prevTotal)})</span>`;
-  } else {
-    wrap.innerHTML='';
+// ── SUCURSAL BREAKDOWN ────────────────────────────
+function updateSucBreakdown() {
+  const bySuc = {};
+  filtRows.forEach(r => { bySuc[r.Sucursal] = (bySuc[r.Sucursal]||0) + r.Subtotal; });
+  const total = Object.values(bySuc).reduce((s,v)=>s+v,0) || 1;
+  const sorted = Object.entries(bySuc).sort((a,b)=>b[1]-a[1]);
+
+  document.getElementById('sucBreakdown').innerHTML = sorted.map(([suc, amt]) => {
+    const color = SUC_COLORS[suc] || '#6b7280';
+    const pct   = (amt/total*100).toFixed(1);
+    return `<div class="suc-row">
+      <div class="suc-dot" style="background:${color}"></div>
+      <div class="suc-name">${SUC_NAMES[suc]||suc}</div>
+      <div class="suc-amt privacy-amt">${fmtShort(amt)}</div>
+      <div class="suc-pct">${pct}%</div>
+    </div>
+    <div style="margin:3px 0 6px;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;">
+      <div style="width:${pct}%;height:100%;background:${color};border-radius:2px;transition:width .5s;"></div>
+    </div>`;
+  }).join('');
+  if (privacyMode) applyPrivacy();
+}
+
+// ── YEAR-OVER-YEAR COMPARE ────────────────────────
+function updateYYCompare() {
+  const wrap = document.getElementById('yyWrap');
+  const years = [...new Set(filtRows.map(r => r.Mes.slice(0,4)))].sort();
+  if (years.length < 2) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0;">Se necesitan datos de al menos 2 años para comparar</div>';
+    return;
   }
-  if(privacyMode)document.querySelectorAll('.compare-count').forEach(el=>el.classList.add('privacy-mask'));
+  const currY = years[years.length-1];
+  const prevY = years[years.length-2];
+  const currRows = filtRows.filter(r => r.Mes.startsWith(currY));
+  const prevRows = filtRows.filter(r => r.Mes.startsWith(prevY));
+  const currTotal = currRows.reduce((s,r)=>s+r.Subtotal,0);
+  const prevTotal = prevRows.reduce((s,r)=>s+r.Subtotal,0);
+  const currCount = currRows.length;
+  const prevCount = prevRows.length;
+  const maxAmt = Math.max(currTotal, prevTotal, 1);
+  const maxCnt = Math.max(currCount, prevCount, 1);
+  const deltaAmt = prevTotal ? ((currTotal-prevTotal)/prevTotal*100) : 0;
+  const deltaCnt = prevCount ? ((currCount-prevCount)/prevCount*100) : 0;
+  const sign = v => v >= 0 ? '+' : '';
+  const dc = deltaAmt >= 0 ? 'delta-up' : 'delta-down';
+  const dk = deltaCnt >= 0 ? 'delta-up' : 'delta-down';
+
+  wrap.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px;">MONTO RECAUDADO</div>
+    <div class="compare-row">
+      <div class="compare-label">${currY}</div>
+      <div class="compare-count privacy-amt">${fmtShort(currTotal)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${currTotal/maxAmt*100}%;background:#e8c547;"></div></div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-label">${prevY}</div>
+      <div class="compare-count privacy-amt">${fmtShort(prevTotal)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${prevTotal/maxAmt*100}%;background:#6b7280;"></div></div>
+    </div>
+    <div style="margin-bottom:14px;"><span class="delta-badge ${dc}">${sign(deltaAmt)}${deltaAmt.toFixed(1)}% (${sign(deltaAmt)}${fmtShort(currTotal-prevTotal)})</span></div>
+
+    <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px;">COBROS (cantidad)</div>
+    <div class="compare-row">
+      <div class="compare-label">${currY}</div>
+      <div class="compare-count">${currCount.toLocaleString('es-AR')}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${currCount/maxCnt*100}%;background:#22c55e;"></div></div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-label">${prevY}</div>
+      <div class="compare-count">${prevCount.toLocaleString('es-AR')}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${prevCount/maxCnt*100}%;background:#6b7280;"></div></div>
+    </div>
+    <div><span class="delta-badge ${dk}">${sign(deltaCnt)}${deltaCnt.toFixed(1)}% (${sign(deltaCnt)}${currCount-prevCount} cobros)</span></div>`;
+  if (privacyMode) applyPrivacy();
+  document.getElementById('yySubtitle').textContent = `${currY} vs ${prevY} — totales anuales`;
 }
 
-// ── DEST GRID ─────────────────────────────
-function updateDestGrid(){
-  const byDest={};
-  filtRows.forEach(r=>byDest[r.Destino]=(byDest[r.Destino]||0)+r.Monto);
-  const total=Object.values(byDest).reduce((s,v)=>s+v,0)||1;
-  const sorted=Object.entries(byDest).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  document.getElementById('destGrid').innerHTML=sorted.map(([dest,amt],i)=>`
-    <div class="dest-row">
-      <div class="dest-name" title="${dest}">${dest}</div>
-      <div class="dest-amt">${fmtShort(amt)}</div>
-      <div class="dest-pct">${(amt/total*100).toFixed(1)}%</div>
-    </div>`).join('');
-  if(privacyMode)document.querySelectorAll('.dest-amt').forEach(el=>el.classList.add('privacy-mask'));
+// ── CONDICION CHART ───────────────────────────────
+function updateCondChart() {
+  const byCond = {};
+  filtRows.forEach(r => { byCond[r.CondicionVenta] = (byCond[r.CondicionVenta]||0) + r.Subtotal; });
+  const sorted = Object.entries(byCond).sort((a,b)=>b[1]-a[1]);
+
+  if (condChartInst) { condChartInst.destroy(); condChartInst = null; }
+  const ctx = document.getElementById('condChart')?.getContext('2d');
+  if (!ctx) return;
+
+  condChartInst = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(x => COND_NAMES[x[0]] || x[0] || '(Sin cond.)'),
+      datasets: [{ data: sorted.map(x=>x[1]), backgroundColor: PALETTE, borderRadius:4, borderWidth:0 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) }}},
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color:'#4b5563', font:{size:10}, callback: v => fmtShort(v) }},
+        y: { grid: { display: false }, ticks: { color: '#7a7f96', font: { size: 11 } } }
+      }
+    }
+  });
 }
 
-// ── TABLE ─────────────────────────────────
-function setPeriodFilter(val){
-  periodFilter=val;
-  document.getElementById('toggleAll').classList.toggle('active',val==='all');
-  document.getElementById('toggleHoy').classList.toggle('active',val==='hoy');
-  page=1;renderTable();renderDestRank();
-}
-
-function sortBy(col){
-  sortAsc=sortCol===col?!sortAsc:(col!=='Monto');
-  sortCol=col;
-  document.querySelectorAll('thead th').forEach(th=>{
+// ── TABLE ─────────────────────────────────────────
+function sortTable(col) {
+  sortAsc = sortCol === col ? !sortAsc : col !== 'total';
+  sortCol = col;
+  document.querySelectorAll('.month-table th').forEach(th => {
     th.classList.remove('sorted');
-    th.textContent=th.textContent.replace(' ↑','').replace(' ↓','');
+    th.textContent = th.textContent.replace(' ↑','').replace(' ↓','');
   });
-  const th=document.querySelector(`th[data-col="${col}"]`);
-  if(th){th.classList.add('sorted');th.textContent+=sortAsc?' ↑':' ↓';}
-  page=1;renderTable();
+  const th = document.querySelector(`.month-table th[data-col="${col}"]`);
+  if (th) { th.classList.add('sorted'); th.textContent += sortAsc ? ' ↑' : ' ↓'; }
+  renderTable();
 }
 
-function renderTable(){
-  const q=(document.getElementById('tableSearch')?.value||'').toLowerCase();
-  const todayStr=new Date().toISOString().slice(0,10);
-  const base=periodFilter==='hoy'?filtRows.filter(r=>r.Dia===todayStr):filtRows;
-  let rows=base.filter(r=>!q||r.Destino.toLowerCase().includes(q)||r.Sucursal.toLowerCase().includes(q)||r.Personal.toLowerCase().includes(q)||r.Observaciones.toLowerCase().includes(q));
-  rows.sort((a,b)=>{
-    const va=a[sortCol],vb=b[sortCol];
-    if(typeof va==='number')return sortAsc?va-vb:vb-va;
-    return sortAsc?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va));
+function renderTable() {
+  const agg   = aggByMonth(filtRows);
+  const meses = Object.keys(agg).sort();
+  if (!meses.length) {
+    document.getElementById('tableBody').innerHTML =
+      `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted);">Sin datos</td></tr>`;
+    return;
+  }
+
+  // Build rows with comparisons
+  const rows = meses.map(mes => {
+    const a = agg[mes];
+    const [y,m] = mes.split('-').map(Number);
+    const prevMes  = `${String(y).padStart(4,'0')}-${String(m-1 || 12).padStart(2,'0')}`;
+    const prevYear = `${String(m===1?y-1:y).padStart(4,'0')}-${String(m-1||12).padStart(2,'0')}`;
+    const prevAnoMes = `${String(y-1).padStart(4,'0')}-${mes.slice(5)}`;
+    const pMes  = agg[prevMes];
+    const pAnio = agg[prevAnoMes];
+    const vsAnt  = pMes  ? (a.total - pMes.total)  / pMes.total  * 100 : null;
+    const vsAnio = pAnio ? (a.total - pAnio.total) / pAnio.total * 100 : null;
+    const promDia = a.dias.size ? a.total / a.dias.size : 0;
+    return { mes, total: a.total, cobros: a.cobros,
+      alumnos: a.alumnos.size, dias: a.dias.size,
+      promDia, vsAnterior: vsAnt, vsAnioAnt: vsAnio };
   });
-  const tot=rows.length,pages=Math.ceil(tot/PG);
-  const sl=rows.slice((page-1)*PG,page*PG);
-  const body=document.getElementById('tableBody');
-  body.innerHTML=sl.length?sl.map(r=>{
-    const sc='suc-'+r.Sucursal.toLowerCase().replace('ñ','n').replace('é','e').replace('España','espana').replace('españa','espana');
-    return`<tr>
-      <td class="mono">${fmtDate(r.Dia)}</td>
-      <td><span class="suc-badge ${sc}">${SUC_NAMES[r.Sucursal]||r.Sucursal}</span></td>
-      <td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;">${r.Destino}</td>
-      <td style="color:var(--muted2);font-size:11px;">${r.Personal}</td>
-      <td style="color:var(--muted2);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;">${r.Observaciones}</td>
-      <td class="amt">${fmt(r.Monto)}</td>
+
+  rows.sort((a,b) => {
+    const va = a[sortCol], vb = b[sortCol];
+    if (va === null) return 1; if (vb === null) return -1;
+    if (typeof va === 'number') return sortAsc ? va-vb : vb-va;
+    return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+
+  const lastMes = meses[meses.length-1];
+  document.getElementById('tableBody').innerHTML = rows.map(r => {
+    const isLast = r.mes === lastMes;
+    const deltaCell = (v) => {
+      if (v === null) return `<td class="num muted">—</td>`;
+      const cls = v >= 0 ? 'color:var(--green)' : 'color:var(--red)';
+      const sign = v >= 0 ? '+' : '';
+      return `<td class="num" style="${cls};font-family:'DM Mono',monospace;">${sign}${v.toFixed(1)}%</td>`;
+    };
+    return `<tr class="${isLast ? 'highlight' : ''}">
+      <td><span class="month-badge">${fmtMes(r.mes)}</span></td>
+      <td class="num">${r.cobros.toLocaleString('es-AR')}</td>
+      <td class="num">${r.destinos.toLocaleString('es-AR')}</td>
+      <td class="amt privacy-amt">${fmt(r.total)}</td>
+      <td class="num muted privacy-amt">${fmt(r.promDia)}</td>
+      ${deltaCell(r.vsAnterior)}
+      ${deltaCell(r.vsAnioAnt)}
     </tr>`;
-  }).join(''):`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">Sin resultados</td></tr>`;
-
-  const lbl=document.getElementById('tableSubLabel');
-  if(lbl)lbl.textContent=`${tot.toLocaleString('es-AR')} pagos${periodFilter==='hoy'?' (solo hoy)':''} — total: ${fmt(rows.reduce((s,r)=>s+r.Monto,0))}`;
-  document.getElementById('pageInfo').textContent=`${(page-1)*PG+1}–${Math.min(page*PG,tot)} de ${tot}`;
-  if(privacyMode)document.querySelectorAll('.amt').forEach(el=>el.classList.add('privacy-mask'));
-
-  const pg=document.getElementById('pagBtns');pg.innerHTML='';
-  const addB=(lbl,p,dis=false,act=false)=>{
-    const b=document.createElement('button');
-    b.className='pag-btn'+(act?' active':'');b.textContent=lbl;b.disabled=dis;
-    b.onclick=()=>{page=p;renderTable();};pg.appendChild(b);
-  };
-  addB('‹',page-1,page===1);
-  const rng=Array.from({length:Math.min(pages,5)},(_,i)=>{
-    if(pages<=5)return i+1;if(page<=3)return i+1;
-    if(page>=pages-2)return pages-4+i;return page-2+i;
-  });
-  rng.forEach(p=>addB(p,p,false,p===page));
-  addB('›',page+1,page===pages);
+  }).join('');
+  if (privacyMode) applyPrivacy();
 }
 
-// ── DEST RANK ─────────────────────────────
-function renderDestRank(){
-  const todayStr=new Date().toISOString().slice(0,10);
-  const src=periodFilter==='hoy'?filtRows.filter(r=>r.Dia===todayStr):filtRows;
-  const byDest={};
-  src.forEach(r=>byDest[r.Destino]=(byDest[r.Destino]||0)+r.Monto);
-  const sorted=Object.entries(byDest).sort((a,b)=>b[1]-a[1]);
-  const lbl=document.getElementById('rankSubLabel');
-  if(lbl)lbl.textContent=periodFilter==='hoy'?'por monto hoy':'por monto en el período';
-  document.getElementById('destRankList').innerHTML=sorted.map(([dest,amt],i)=>`
-    <div class="dest-rank-row">
-      <div class="dest-rank-idx">${i+1}</div>
-      <div class="dest-rank-name" title="${dest}">${dest}</div>
-      <div class="dest-rank-amt">${fmtShort(amt)}</div>
-    </div>`).join('');
-  if(privacyMode)document.querySelectorAll('.dest-rank-amt').forEach(el=>el.classList.add('privacy-mask'));
+// ── UTILS ─────────────────────────────────────────
+function fmt(n) { return '$' + Math.round(n).toLocaleString('es-AR'); }
+function fmtShort(n) {
+  if (n>=1e9) return '$'+(n/1e9).toFixed(1)+'B';
+  if (n>=1e6) return '$'+(n/1e6).toFixed(1)+'M';
+  if (n>=1e3) return '$'+(n/1e3).toFixed(0)+'K';
+  return '$'+Math.round(n);
+}
+function fmtMes(mes) {
+  const [y,m] = mes.split('-').map(Number);
+  return MNAMES[m] + ' ' + y;
+}
+function fmtMesShort(mes) {
+  const [y,m] = mes.split('-').map(Number);
+  return MSHORT[m] + ' ' + String(y).slice(2);
 }
 </script>
 </body>
