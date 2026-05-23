@@ -350,13 +350,9 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
       </button>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
       <button class="upload-btn" onclick="document.getElementById('fileInput').click()" title="Cargar nuevo archivo o actualizar datos">
-        📂 Cargar / Actualizar
+        📂 Cargar Excel
       </button>
-      <button onclick="clearStoredData()" title="Borrar datos guardados"
-        style="padding:6px 10px;border-radius:7px;background:transparent;border:1px solid var(--border2);
-               color:var(--muted);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;">
-        🗑
-      </button>
+
     </div>
   </div>
 
@@ -434,7 +430,7 @@ const EMP_COLORS = ['#e8c547','#3b82f6','#22c55e','#a855f7','#f97316','#ef4444']
 const SUC_COLORS = { Alvarado:'#3b82f6', Caseros:'#a855f7', España:'#22c55e', Doris:'#f97316' };
 const PALETTE    = ['#e8c547','#3b82f6','#22c55e','#a855f7','#f97316','#ef4444','#06b6d4'];
 
-let allRows = [], filtRows = [], lastFileName = '';
+let allRows = [], filtRows = [];
 let sortCol = 'Dia', sortAsc = false;
 let page = 1;
 const PG = 50;
@@ -450,20 +446,7 @@ function setPeriodFilter(val) {
 }
 
 // Clear stored data
-function clearStoredData() {
-  if (confirm('¿Borrar los datos guardados? Tendrás que cargar el Excel de nuevo.')) {
-    localStorage.removeItem('dashboardData');
-    allRows = []; filtRows = [];
-    document.getElementById('fileLabel').textContent = 'sin archivo';
-    document.getElementById('contentArea').innerHTML = `
-      <div class="empty-state">
-        <span class="big">📂</span>
-        Cargá el archivo de exportación de Caja para comenzar<br>
-        <span style="font-size:11px;color:var(--muted2);">Usá el botón "Cargar / Actualizar" arriba a la derecha</span>
-      </div>`;
-    document.getElementById('botRow').style.display = 'none';
-  }
-}
+
 
 // Sidebar nav toggle
 function toggleNav(id) {
@@ -493,31 +476,19 @@ function togglePrivacy() {
     .forEach(el => el.classList.toggle('privacy-mask', privacyMode));
 }
 
-// Auto-load persisted data — esperar a que el DOM esté listo
-document.addEventListener('DOMContentLoaded', function() {
-  try {
-    const raw = localStorage.getItem('dashboardData');
-    if (!raw) return;
-    const payload = JSON.parse(raw);
-    if (!payload.rows || !payload.rows.length) return;
-    allRows = payload.rows;
-    lastFileName = payload.file || 'archivo guardado';
-    const mins = Math.round((Date.now() - payload.ts) / 60000);
-    const agoStr = mins < 1 ? 'recién cargado' : mins < 60 ? 'hace ' + mins + ' min' : 'hace ' + Math.round(mins/60) + 'h';
-    const lbl = document.getElementById('fileLabel');
-    if (lbl) lbl.textContent = lastFileName + ' · ' + agoStr;
-    buildDashboard();
-  } catch(e) {
-    console.warn('Error al cargar datos guardados:', e);
-  }
-});
+// (auto-load merged into DOMContentLoaded above)
 
-// Set today label
-const now = new Date();
+// Set today label — wrapped in DOMContentLoaded to ensure elements exist
 const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-document.getElementById('todayLabel').textContent =
-  DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
+
+// Set today label
+window.onload = function() {
+  const now = new Date();
+  const todayEl = document.getElementById('todayLabel');
+  if (todayEl) todayEl.textContent =
+    DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
+};
 
 // ════════════════════════════════════════════════
 // FILE LOAD
@@ -525,7 +496,6 @@ document.getElementById('todayLabel').textContent =
 document.getElementById('fileInput').addEventListener('change', e => {
   const file = e.target.files[0]; if (!file) return;
   document.getElementById('loading').classList.add('show');
-  lastFileName = file.name;
   const reader = new FileReader();
   reader.onload = ev => {
     try {
@@ -588,15 +558,52 @@ function parseWorkbook(wb) {
     alert('No se encontraron registros. Verificá que el archivo esté desmergeado y sea el exportado de Caja.');
     return;
   }
-  // Persistir datos para navegación sin recargar
+  // Guardar cobranzas + parsear pagos y guardar todo junto
+  const pagosRows = _parsePagos(wb);
   try {
-    const payload = JSON.stringify({ rows: allRows, file: lastFileName, ts: Date.now() });
-    localStorage.setItem('dashboardData', payload);
-  } catch(e) {
-    console.warn('No se pudo guardar en localStorage:', e);
-  }
-  document.getElementById('fileLabel').textContent = lastFileName + ' · recién cargado';
+    const ts = Date.now();
+    localStorage.setItem('dashboardAllData', JSON.stringify({
+      cobranzas: allRows, pagos: pagosRows, file: file.name, ts
+    }));
+    localStorage.setItem('dashboardData',        JSON.stringify({ rows: allRows,   file: file.name, ts }));
+    localStorage.setItem('dashboardEgresosData', JSON.stringify({ rows: pagosRows, file: file.name, ts }));
+  } catch(e) { console.warn('localStorage:', e); }
+  document.getElementById('fileLabel').textContent = file.name + ' · recién cargado';
   buildDashboard();
+}
+
+function _parsePagos(wb) {
+  const cfg2 = JSON.parse(localStorage.getItem('dashboardConfig') || '{}');
+  const excl = cfg2.egresosExcluidos || [];
+  const pats = cfg2.patterns || ['Saldo de Caja'];
+  const sucA = cfg2.sucursalActive || {};
+  const sh = wb.Sheets['Pagos']; if (!sh) return [];
+  const raw = XLSX.utils.sheet_to_json(sh, { header:1, defval:'' });
+  let hdr = -1;
+  for (let i=0; i<Math.min(10,raw.length); i++) {
+    if (String(raw[i][0]||'').trim()==='Fecha') { hdr=i; break; }
+  }
+  if (hdr < 0) return [];
+  const rows = [];
+  for (let i=hdr+1; i<raw.length; i++) {
+    const r = raw[i];
+    if (!r||!r[0]||String(r[0]).trim()==='') continue;
+    const mx = String(r[0]).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (!mx) continue;
+    const dia = mx[3]+'-'+mx[2].padStart(2,'0')+'-'+mx[1].padStart(2,'0');
+    const monto = parseFloat(String(r[7]||'0').replace(',','.'));
+    if (isNaN(monto)||monto<=0) continue;
+    const suc = String(r[2]||'').trim();
+    if (!suc||suc==='Sucursal') continue;
+    if (sucA[suc]===false) continue;
+    const dest = String(r[6]||'').trim();
+    if (excl.includes(dest)) continue;
+    if (pats.some(p=>dest.includes(p))) continue;
+    rows.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
+      Personal:String(r[3]||'').trim(), Observaciones:String(r[4]||'').trim(),
+      Destino:dest, Monto:monto });
+  }
+  return rows;
 }
 
 // ════════════════════════════════════════════════
