@@ -156,9 +156,10 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
     <div class="topbar-title">☰ &nbsp; Ingresos Mensuales</div>
     <div class="topbar-right">
       <span class="topbar-date" id="todayLabel">—</span>
+      <span id="fileLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
       <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()" title="Ocultar montos">👁 Modo privado</button>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📂 Cargar Excel</button>
+      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📂 Cargar / Actualizar</button>
     </div>
   </div>
 
@@ -224,10 +225,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!raw) return;
     const payload = JSON.parse(raw);
     if (!payload.rows?.length) return;
-    allRows = payload.rows;
+    // Add Mes field if missing (rows saved by ingresos_diarios don't have it)
+    allRows = payload.rows.map(r => ({
+      ...r,
+      Mes: r.Mes || (r.Dia ? r.Dia.slice(0,7) : '')
+    })).filter(r => r.Mes);
     lastFileName = payload.file || 'archivo guardado';
     const mins = Math.round((Date.now() - payload.ts) / 60000);
     const ago = mins < 1 ? 'recién' : mins < 60 ? 'hace ' + mins + 'm' : 'hace ' + Math.round(mins/60) + 'h';
+    const fileLbl = document.getElementById('fileLabel');
+    if (fileLbl) fileLbl.textContent = lastFileName + ' · ' + ago;
     buildDashboard();
   } catch(e) { console.warn(e); }
 });
@@ -281,6 +288,8 @@ function parseWorkbook(wb) {
   try {
     localStorage.setItem('dashboardData', JSON.stringify({ rows: allRows, file: lastFileName, ts: Date.now() }));
   } catch(e) {}
+  const fileLbl = document.getElementById('fileLabel');
+  if (fileLbl) fileLbl.textContent = lastFileName + ' · recién cargado';
   buildDashboard();
 }
 
