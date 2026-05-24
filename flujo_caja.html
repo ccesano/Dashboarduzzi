@@ -150,9 +150,16 @@ td.proj-val{color:var(--accent)!important;opacity:.8;}
     <div class="topbar-right">
       <span class="topbar-date" id="todayLabel">—</span>
       <div class="infl-wrap">
-        <span class="infl-label">Inflación mensual:</span>
+        <span class="infl-label">Inflación:</span>
         <input class="infl-input" type="number" id="inflInput" value="3" min="0" max="100" step="0.5">
-        <span class="infl-label">%&nbsp;&nbsp;Proyectar:</span>
+        <span class="infl-label">%</span>
+        <span class="infl-label" style="margin-left:4px;">Base:</span>
+        <select class="proj-select" id="methodSelect">
+          <option value="avg">Promedio</option>
+          <option value="last">Último mes</option>
+          <option value="trend">Tendencia</option>
+        </select>
+        <span class="infl-label">Proyectar:</span>
         <select class="proj-select" id="projSelect">
           <option value="3">3 meses</option>
           <option value="6" selected>6 meses</option>
@@ -310,31 +317,41 @@ function buildDashboard() {
 }
 
 function computeProjBase(realMeses, cobRows, pagRows, otrosRows, infl) {
-  const last6 = realMeses.slice(-6);
-  // Avg monthly income by destino
-  const avgCob = {}, avgPag = {}, avgOtros = {};
-  const aggCob = {}; cobRows.forEach(r=>{ if(!aggCob[r.Mes]) aggCob[r.Mes]={}; aggCob[r.Mes][r.Destino]=(aggCob[r.Mes][r.Destino]||0)+r.Subtotal; });
-  const aggPag = {}; pagRows.forEach(r=>{ if(!aggPag[r.Mes]) aggPag[r.Mes]={}; aggPag[r.Mes][r.Destino]=(aggPag[r.Mes][r.Destino]||0)+r.Monto; });
-  const aggOtros = {}; otrosRows.forEach(r=>{ if(!aggOtros[r.Mes]) aggOtros[r.Mes]={}; aggOtros[r.Mes][r.Concepto||r.Destino]=(aggOtros[r.Mes][r.Concepto||r.Destino]||0)+r.Monto; });
+  const method = document.getElementById('methodSelect')?.value || 'avg';
+  const last6  = realMeses.slice(-6);
+  const lastM  = realMeses[realMeses.length-1];
 
-  // Average across last 6 months
-  const allDestCob = [...new Set(cobRows.map(r=>r.Destino))];
-  allDestCob.forEach(d => {
-    const vals = last6.map(m=>(aggCob[m]||{})[d]||0);
-    avgCob[d] = vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
-  });
-  const allDestPag = [...new Set(pagRows.map(r=>r.Destino))];
-  allDestPag.forEach(d => {
-    const vals = last6.map(m=>(aggPag[m]||{})[d]||0);
-    avgPag[d] = vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
-  });
-  const allDestOtros = [...new Set(otrosRows.map(r=>r.Concepto||r.Destino))];
-  allDestOtros.forEach(d => {
-    const vals = last6.map(m=>(aggOtros[m]||{})[d]||0);
-    avgOtros[d] = vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
-  });
+  const aggCob={}, aggPag={}, aggOtros={};
+  cobRows.forEach(r=>{ if(!aggCob[r.Mes]) aggCob[r.Mes]={}; aggCob[r.Mes][r.Destino]=(aggCob[r.Mes][r.Destino]||0)+r.Subtotal; });
+  pagRows.forEach(r=>{ if(!aggPag[r.Mes]) aggPag[r.Mes]={}; aggPag[r.Mes][r.Destino]=(aggPag[r.Mes][r.Destino]||0)+r.Monto; });
+  otrosRows.forEach(r=>{ if(!aggOtros[r.Mes]) aggOtros[r.Mes]={}; aggOtros[r.Mes][r.Concepto||r.Destino]=(aggOtros[r.Mes][r.Concepto||r.Destino]||0)+r.Monto; });
 
-  return { avgCob, avgPag, avgOtros, inflFactor: 1+(infl/100) };
+  function baseVal(agg, dest, field) {
+    if (method === 'last') {
+      return (agg[lastM]||{})[dest]||0;
+    } else if (method === 'trend') {
+      const vals = last6.map(m=>(agg[m]||{})[dest]||0).filter(v=>v>0);
+      if (vals.length < 2) return vals[0]||0;
+      // Linear trend: slope × last index
+      const n = vals.length;
+      const sumX = n*(n-1)/2, sumY = vals.reduce((s,v)=>s+v,0);
+      const sumXY = vals.reduce((s,v,i)=>s+i*v,0);
+      const sumX2 = vals.reduce((s,_,i)=>s+i*i,0);
+      const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+      return Math.max(0, vals[vals.length-1] + slope);
+    } else {
+      // avg
+      const vals = last6.map(m=>(agg[m]||{})[dest]||0);
+      return vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
+    }
+  }
+
+  const avgCob={}, avgPag={}, avgOtros={};
+  [...new Set(cobRows.map(r=>r.Destino))].forEach(d=>{ avgCob[d]=baseVal(aggCob,d); });
+  [...new Set(pagRows.map(r=>r.Destino))].forEach(d=>{ avgPag[d]=baseVal(aggPag,d); });
+  [...new Set(otrosRows.map(r=>r.Concepto||r.Destino))].forEach(d=>{ avgOtros[d]=baseVal(aggOtros,d); });
+
+  return { avgCob, avgPag, avgOtros, inflFactor: 1+(infl/100), method };
 }
 
 // Get value for a month/destino (real or projected)
@@ -413,6 +430,15 @@ function renderKPIs(realMeses) {
 
   renderChart2(realMeses);
   renderCurrentTab();
+  // Render adjustment panel
+  let adjSec = document.getElementById('adjSection');
+  if (!adjSec) {
+    adjSec = document.createElement('div');
+    adjSec.id = 'adjSection';
+    adjSec.className = 'adj-section';
+    document.getElementById('mainContent').appendChild(adjSec);
+  }
+  adjSec.innerHTML = renderAdjPanel();
   if (privacyMode) document.querySelectorAll('.pv').forEach(el=>el.classList.add('privacy-mask'));
 }
 
@@ -541,11 +567,41 @@ function renderResumen(sec) {
     return valCell(v,projMeses.includes(m),'egr');
   }).join('')}</tr>`;
 
-  // SALDO NETO row
+  // MANUAL ADJUSTMENTS rows
+  const adjs = loadAdjustments();
+  const adjIngresos = adjs.filter(a=>a.type==='ingreso');
+  const adjGastos   = adjs.filter(a=>a.type==='gasto');
+
+  if (adjIngresos.length) {
+    html += `<tr class="section-header"><td colspan="${allMeses.length+1}">✏️ INGRESOS VARIABLES</td></tr>`;
+    adjIngresos.forEach(a=>{
+      html += `<tr class="manual-row"><td>
+        ${a.desc} <span class="del-btn" onclick="deleteAdjustment(${a.id})" title="Eliminar">✕</span>
+      </td>${allMeses.map(m=>{
+        const v = m===a.mes ? a.monto : 0;
+        return `<td class="pv${projMeses.includes(m)?' proj':''}" style="color:var(--green)">${v>0?fmt(v):'—'}</td>`;
+      }).join('')}</tr>`;
+    });
+  }
+  if (adjGastos.length) {
+    html += `<tr class="section-header"><td colspan="${allMeses.length+1}">✏️ GASTOS VARIABLES</td></tr>`;
+    adjGastos.forEach(a=>{
+      html += `<tr class="manual-row"><td>
+        ${a.desc} <span class="del-btn" onclick="deleteAdjustment(${a.id})" title="Eliminar">✕</span>
+      </td>${allMeses.map(m=>{
+        const v = m===a.mes ? a.monto : 0;
+        return `<td class="pv${projMeses.includes(m)?' proj':''}" style="color:var(--red)">${v>0?fmt(v):'—'}</td>`;
+      }).join('')}</tr>`;
+    });
+  }
+
+  // SALDO NETO row (including manual adjustments)
   html += `<tr class="neto-row"><td>SALDO NETO</td>${allMeses.map(m=>{
-    const ing=getCobVal(m)+getOIVal(m);
-    const egr=CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,m),0);
-    const neto=ing-egr;
+    const ing  = getCobVal(m)+getOIVal(m);
+    const egr  = CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,m),0);
+    const adjI = adjs.filter(a=>a.type==='ingreso'&&a.mes===m).reduce((s,a)=>s+a.monto,0);
+    const adjG = adjs.filter(a=>a.type==='gasto'  &&a.mes===m).reduce((s,a)=>s+a.monto,0);
+    const neto = ing + adjI - egr - adjG;
     const isProj=projMeses.includes(m);
     const projClass=isProj?' proj proj-val':'';
     return `<td class="pv${projClass}" style="color:${neto>=0?'var(--green)':'var(--red)'};font-weight:700;">${fmt(neto)}</td>`;
@@ -790,6 +846,58 @@ function exportExcel() {
   const now = new Date();
   const fname = `FlujosCaja_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.xlsx`;
   XLSX.writeFile(wb, fname);
+}
+
+// ═══════════════════════════════════════════════════════
+// MANUAL ADJUSTMENTS
+// ═══════════════════════════════════════════════════════
+const ADJ_KEY = 'flujoAjustes';
+
+function loadAdjustments() {
+  try { return JSON.parse(localStorage.getItem(ADJ_KEY)||'[]'); } catch(e){ return []; }
+}
+function saveAdjustments(adjs) {
+  localStorage.setItem(ADJ_KEY, JSON.stringify(adjs));
+}
+function addAdjustment(type) {
+  const desc  = document.getElementById('adjDesc').value.trim();
+  const mesEl = document.getElementById('adjMes');
+  const mes   = mesEl?.value;
+  const monto = parseFloat(document.getElementById('adjMonto').value)||0;
+  if (!desc || !mes || !monto) { alert('Completá descripción, mes y monto.'); return; }
+  const adjs = loadAdjustments();
+  adjs.push({ id: Date.now(), type, desc, mes, monto });
+  saveAdjustments(adjs);
+  document.getElementById('adjDesc').value = '';
+  document.getElementById('adjMonto').value = '';
+  buildDashboard();
+}
+function deleteAdjustment(id) {
+  const adjs = loadAdjustments().filter(a => a.id !== id);
+  saveAdjustments(adjs);
+  buildDashboard();
+}
+
+function renderAdjPanel() {
+  const adjs = loadAdjustments();
+  const monthOpts = allMeses.map(m =>
+    `<option value="${m}">${fmtMesShort(m)}${projMeses.includes(m)?'★':''}</option>`
+  ).join('');
+
+  return `
+    <div class="adj-bar">
+      <span class="adj-label">➕ Agregar ajuste:</span>
+      <input  class="adj-input wide" id="adjDesc"  placeholder="Descripción (ej: Inversión techado)">
+      <select class="adj-select"     id="adjMes">${monthOpts}</select>
+      <input  class="adj-input adj-num" id="adjMonto" type="number" placeholder="Monto $" min="0">
+      <button class="btn-add-ing" onclick="addAdjustment('ingreso')">+ Ingreso variable</button>
+      <button class="btn-add-egr" onclick="addAdjustment('gasto')">+ Gasto variable</button>
+    </div>
+    ${adjs.length ? `<div style="font-size:11px;color:var(--muted);padding:6px 14px;">
+      ${adjs.length} ajuste(s) cargado(s) — aparecen en las tablas y en el Saldo Neto.
+      <span onclick="if(confirm('¿Borrar todos los ajustes?')){localStorage.removeItem('${ADJ_KEY}');buildDashboard();}"
+        style="color:var(--red);cursor:pointer;margin-left:8px;">Borrar todos</span>
+    </div>` : ''}`;
 }
 
 // ═══════════════════════════════════════════════════════
