@@ -295,6 +295,32 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
       </div>
     </div>
 
+
+    <!-- 7. PLAZOS DE ACREDITACIÓN -->
+    <div class="sec-card" id="sec-plazos">
+      <div class="sec-head" onclick="toggle('sec-plazos')">
+        <div class="sec-head-left">
+          <div class="sec-icon blue">⏱</div>
+          <div>
+            <div class="sec-title">Plazos de Acreditación</div>
+            <div class="sec-sub">Días corridos hasta que el dinero está disponible según medio de pago</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="sec-badge ok" id="bdg-plazos">Configurado</span>
+          <span class="chevron">▼</span>
+        </div>
+      </div>
+      <div class="sec-body">
+        <div class="info-box">
+          <span>ℹ️</span>
+          <span>Estos plazos se usan en <b>Ingresos Diarios</b> para calcular el KPI "Disponible próximos 7 días". 
+          Por ejemplo: Tarjeta de Crédito con 7 días significa que un cobro del 1/6 estará disponible el 8/6.</span>
+        </div>
+        <div id="list-plazos"></div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -329,6 +355,7 @@ function loadState() {
     sucursalActive:   Object.fromEntries(ALL_SUPS.map(s => [s, true])),
     sucursalNames:    Object.fromEntries(ALL_SUPS.map(s => [s, s])),
     conditionNames:   Object.fromEntries(ALL_CONDS.map(c => [c, c])),
+    condicionPlazos:  {...DEFAULT_PLAZOS},
   };
 }
 let state = loadState();
@@ -516,10 +543,45 @@ function renderCondiciones() {
     </div>`).join('');
 }
 
+// Default acreditation days per payment method
+const DEFAULT_PLAZOS = {
+  'Contado': 0,
+  'Cuenta Corriente': 0,
+  'Débito Directo': 1,
+  'Tarjeta de Débito': 1,
+  'Cheque': 30,
+  'Tarjeta de Crédito': 7,
+  'Otra': 0
+};
+
+function renderPlazos() {
+  if (!state.condicionPlazos) state.condicionPlazos = {...DEFAULT_PLAZOS};
+  document.getElementById('list-plazos').innerHTML = ALL_CONDS.map(c => {
+    const dias = state.condicionPlazos[c] ?? DEFAULT_PLAZOS[c] ?? 0;
+    const isImmediate = dias === 0;
+    return `<div class="rename-row">
+      <div class="rename-original" style="min-width:200px;">${state.conditionNames[c] || c}</div>
+      <div class="rename-arrow">→</div>
+      <div style="display:flex;align-items:center;gap:10px;flex:1;">
+        <input class="rename-input" type="number" min="0" max="365"
+          value="${dias}" style="width:80px;text-align:center;font-family:'DM Mono',monospace;"
+          onchange="state.condicionPlazos['${c}'] = parseInt(this.value)||0; renderPlazos();">
+        <span style="font-size:12px;color:var(--muted);">días corridos</span>
+        <span style="font-size:11px;padding:2px 8px;border-radius:10px;
+          background:${isImmediate?'rgba(34,197,94,.1)':'rgba(232,197,71,.1)'};
+          color:${isImmediate?'var(--green)':'var(--accent)'};">
+          ${isImmediate ? '✓ Inmediato' : '⏱ Diferido'}
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 // ═══════════════════════════════════════
 // SAVE
 // ═══════════════════════════════════════
 function saveConfig() {
+  if (!state.condicionPlazos) state.condicionPlazos = {...DEFAULT_PLAZOS};
   localStorage.setItem('dashboardConfig', JSON.stringify(state));
   const t = document.getElementById('toast');
   t.classList.add('show');
@@ -536,6 +598,7 @@ renderCategories();
 renderBudget();
 renderSucursales();
 renderCondiciones();
+renderPlazos();
 </script>
 </body>
 </html>

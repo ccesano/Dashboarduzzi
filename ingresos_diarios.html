@@ -345,14 +345,8 @@ td.amt { font-family: 'DM Mono', monospace; text-align: right; color: var(--acce
     </div>
     <div class="topbar-right">
       <span class="topbar-date" id="todayLabel">—</span>
-      <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()" title="Ocultar montos">
-        👁 Modo privado
-      </button>
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()" title="Cargar nuevo archivo o actualizar datos">
-        📂 Cargar Excel
-      </button>
-
+      <span id="fileLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+      <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()" title="Ocultar montos">👁 Modo privado</button>
     </div>
   </div>
 
@@ -519,19 +513,7 @@ window.onload = function() {
 // ════════════════════════════════════════════════
 // FILE LOAD
 // ════════════════════════════════════════════════
-document.getElementById('fileInput').addEventListener('change', e => {
-  const file = e.target.files[0]; if (!file) return;
-  document.getElementById('loading').classList.add('show');
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const wb = XLSX.read(ev.target.result, { type: 'array' });
-      parseWorkbook(wb);
-    } catch(err) { alert('Error: ' + err.message); }
-    document.getElementById('loading').classList.remove('show');
-  };
-  reader.readAsArrayBuffer(file);
-});
+// File loading handled by index.html
 
 function parseDate(s) {
   const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -828,16 +810,21 @@ function updateKPIs() {
   const refStr    = refDate.toISOString().slice(0,10);
   const ref7      = new Date(refDate); ref7.setDate(ref7.getDate()+7);
   const ref7Str   = ref7.toISOString().slice(0,10);
-  const disp = filtRows
-    .filter(r => r.CondicionVenta.includes('Tarjeta'))
-    .reduce((s,r) => {
-      const avail = new Date(r.Dia+'T00:00:00'); avail.setDate(avail.getDate()+7);
-      const aStr  = avail.toISOString().slice(0,10);
-      return (aStr > refStr && aStr <= ref7Str) ? s + r.Subtotal : s;
-    }, 0);
-  const dispLabel = lastDia
-    ? 'hasta ' + fmtDate(ref7Str) 
-    : 'tarjetas +7 días';
+  // Use configurable acreditation days from config
+  const condPlazos = cfg.condicionPlazos || {};
+  const DEFAULT_PLAZO = { 'Tarjeta de Crédito':7, 'Tarjeta de Débito':1, 'Cheque':30,
+    'Contado':0, 'Cuenta Corriente':0, 'Débito Directo':1, 'Otra':0 };
+
+  // Calculate "disponible próximos 7 días" using configured days per payment method
+  const disp = filtRows.reduce((s,r) => {
+    const plazo = parseInt(condPlazos[r.CondicionVenta] ?? DEFAULT_PLAZO[r.CondicionVenta] ?? 0);
+    if (plazo <= 0) return s; // cash/immediate — already collected
+    const avail = new Date(r.Dia+'T00:00:00');
+    avail.setDate(avail.getDate() + plazo);
+    const aStr = avail.toISOString().slice(0,10);
+    return (aStr > refStr && aStr <= ref7Str) ? s + r.Subtotal : s;
+  }, 0);
+  const dispLabel = lastDia ? 'hasta ' + fmtDate(ref7Str) : '+N días según medio';
 
   // KPI 4: Total del día de HOY real — $0 si no hay datos de hoy
   const todayStr  = new Date().toISOString().slice(0,10);
