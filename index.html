@@ -245,12 +245,19 @@ async function syncFromSheets() {
 // Parse raw array-of-arrays from Sheets API into row objects
 function parseDate(s) {
   if (!s) return null;
-  // Handle DD/MM/YYYY format
-  const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  const str = String(s).trim();
+  // Handle DD/MM/YYYY or DD/MM/YYYY HH:MM (with optional time)
+  const m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
-  // Handle YYYY-MM-DD format (already correct)
-  const m2 = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m2) return s.slice(0,10);
+  // Handle YYYY-MM-DD format
+  const m2 = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m2) return str.slice(0,10);
+  // Handle Google Sheets serial date number
+  if (/^\d+(\.\d+)?$/.test(str)) {
+    const serial = parseFloat(str);
+    const d = new Date((serial - 25569) * 86400 * 1000);
+    return d.toISOString().slice(0,10);
+  }
   return null;
 }
 
@@ -270,7 +277,7 @@ function parseSheetRows(rows, type) {
     const dia = parseDate(String(r[0]).trim()); if (!dia) continue;
 
     if (type === 'cobranzas') {
-      const sub = parseFloat(String(r[8]||'0').replace(',','.'));
+      const sub = parseFloat(String(r[8]||'0').replace(/[$\s]/g,'').replace(/\./g,'').replace(',','.'));
       if (isNaN(sub) || sub < 0) continue;
       const suc = String(r[2]||'').trim();
       if (!suc || suc === 'Sucursal') continue;
@@ -280,7 +287,7 @@ function parseSheetRows(rows, type) {
         Destino:String(r[6]||'').trim(), Alumno:String(r[7]||'').trim(), Subtotal:sub });
 
     } else if (type === 'pagos') {
-      const monto = parseFloat(String(r[7]||'0').replace(',','.'));
+      const monto = parseFloat(String(r[7]||'0').replace(/[$\s]/g,'').replace(/\./g,'').replace(',','.'));
       if (isNaN(monto) || monto <= 0) continue;
       const suc = String(r[2]||'').trim();
       if (!suc || suc === 'Sucursal') continue;
@@ -293,7 +300,7 @@ function parseSheetRows(rows, type) {
         Destino:dest, Monto:monto });
 
     } else if (type === 'otros') {
-      const monto = parseFloat(String(r[5]||'0').replace(',','.'));
+      const monto = parseFloat(String(r[5]||'0').replace(/[$\s]/g,'').replace(/\./g,'').replace(',','.'));
       if (isNaN(monto) || monto <= 0) continue;
       const conc = String(r[3]||'').trim();
       const excl = cfg.otrosExcluidos || [];
