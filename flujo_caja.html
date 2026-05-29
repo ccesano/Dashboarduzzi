@@ -293,8 +293,6 @@ async function loadData(sheets = ['cobranzas']) {
 // ═══════════════════════════════════════════════════════
 // CONFIG & STATE
 // ═══════════════════════════════════════════════════════
-const cfg       = JSON.parse(localStorage.getItem('dashboardConfig') || '{}');
-const SUC_NAMES = cfg.sucursalNames  || {};
 const EG_CATS   = cfg.egresosCats   || {};
 const OI_PREFIX = cfg.oiPrefix      || '[OI]';
 const DAYS      = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];

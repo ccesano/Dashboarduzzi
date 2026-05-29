@@ -246,8 +246,6 @@ async function loadData(sheets = ['cobranzas']) {
 </div>
 
 <script>
-const cfg       = JSON.parse(localStorage.getItem('dashboardConfig') || '{}');
-const SUC_NAMES = cfg.sucursalNames || {};
 const OI_PREFIX = cfg.oiPrefix || '[OI]';
 const SUC_COLORS= {Alvarado:'#3b82f6',Caseros:'#a855f7',España:'#22c55e',Doris:'#f97316'};
 const MNAMES    = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];

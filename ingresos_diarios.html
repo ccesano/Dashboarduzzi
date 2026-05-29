@@ -512,9 +512,6 @@ async function loadData(sheets = ['cobranzas']) {
 // ════════════════════════════════════════════════
 // CONFIG
 // ════════════════════════════════════════════════
-const cfg = JSON.parse(localStorage.getItem('dashboardConfig') || '{}');
-const SUC_NAMES  = cfg.sucursalNames    || {};
-const SUC_ACTIVE = cfg.sucursalActive   || {};
 const COND_NAMES = cfg.conditionNames   || {};
 
 const EMP_COLORS = ['#e8c547','#3b82f6','#22c55e','#a855f7','#f97316','#ef4444'];

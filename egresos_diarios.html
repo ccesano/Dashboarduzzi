@@ -325,11 +325,6 @@ async function loadData(sheets = ['cobranzas']) {
 </div>
 
 <script>
-const cfg       = JSON.parse(localStorage.getItem('dashboardConfig') || '{}');
-const SUC_NAMES = cfg.sucursalNames  || {};
-const SUC_ACTIVE= cfg.sucursalActive || {};
-const EG_EXCL   = cfg.egresosExcluidos || [];
-const PATTERNS  = cfg.patterns || ['Saldo de Caja'];
 
 const SUC_COLORS = {Alvarado:'#3b82f6',Caseros:'#a855f7',España:'#22c55e',Doris:'#f97316'};
 const PALETTE    = ['#ef4444','#f97316','#e8c547','#3b82f6','#22c55e','#a855f7','#06b6d4'];
