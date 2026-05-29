@@ -96,6 +96,96 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 </style>
+<script>
+// Shared data loader — used by all pages
+// Calls /api/sheets directly, no sessionStorage needed
+
+const cfg       = JSON.parse(localStorage.getItem('dashboardConfig') || '{}');
+const SUC_NAMES = cfg.sucursalNames  || {};
+const SUC_ACTIVE= cfg.sucursalActive || {};
+const EG_EXCL   = cfg.egresosExcluidos || [];
+const PATTERNS  = cfg.patterns || ['Saldo de Caja'];
+
+function parseDate(s) {
+  if (!s) return null;
+  const str = String(s).trim();
+  const m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  const m2 = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m2) return str.slice(0,10);
+  if (/^\d+(\.\d+)?$/.test(str)) {
+    const d = new Date((parseFloat(str) - 25569) * 86400 * 1000);
+    return d.toISOString().slice(0,10);
+  }
+  return null;
+}
+
+function parseMonto(s) {
+  return parseFloat(String(s||'0').replace(/[$\s]/g,'').replace(/\./g,'').replace(',','.')) || 0;
+}
+
+function parseSheetRows(rows, type) {
+  if (!rows || rows.length < 2) return [];
+  let hdrIdx = -1;
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    if (String(rows[i][0]||'').trim() === 'Fecha') { hdrIdx = i; break; }
+  }
+  if (hdrIdx < 0) return [];
+  const result = [];
+  for (let i = hdrIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0] || String(r[0]).trim() === '') continue;
+    const dia = parseDate(String(r[0]).trim()); if (!dia) continue;
+    if (type === 'cobranzas') {
+      const sub = parseMonto(r[8]);
+      if (sub < 0) continue;
+      const suc = String(r[2]||'').trim();
+      if (!suc || suc === 'Sucursal') continue;
+      if (SUC_ACTIVE[suc] === false) continue;
+      result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
+        Personal:String(r[3]||'').trim(), CondicionVenta:String(r[4]||'').trim(),
+        Destino:String(r[6]||'').trim(), Alumno:String(r[7]||'').trim(), Subtotal:sub });
+    } else if (type === 'pagos') {
+      const monto = parseMonto(r[7]);
+      if (monto <= 0) continue;
+      const suc = String(r[2]||'').trim();
+      if (!suc || suc === 'Sucursal') continue;
+      if (SUC_ACTIVE[suc] === false) continue;
+      const dest = String(r[6]||'').trim();
+      if (EG_EXCL.includes(dest)) continue;
+      if (PATTERNS.some(p => dest.includes(p))) continue;
+      result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
+        Personal:String(r[3]||'').trim(), Observaciones:String(r[4]||'').trim(),
+        Destino:dest, Monto:monto });
+    } else if (type === 'otros') {
+      const monto = parseMonto(r[5]);
+      if (monto <= 0) continue;
+      const conc = String(r[3]||'').trim();
+      const excl = cfg.otrosExcluidos || [];
+      if (excl.includes(conc)) continue;
+      if (PATTERNS.some(p => conc.includes(p))) continue;
+      result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:String(r[1]||'').trim(),
+        Personal:String(r[2]||'').trim(), Concepto:conc,
+        Observaciones:String(r[4]||'').trim(), Monto:monto });
+    }
+  }
+  return result;
+}
+
+async function loadData(sheets = ['cobranzas']) {
+  const resp = await fetch('/api/sheets');
+  if (!resp.ok) throw new Error('Error ' + resp.status);
+  const raw = await resp.json();
+  const result = {};
+  if (sheets.includes('cobranzas'))    result.cobranzas    = parseSheetRows(raw.cobranzas,     'cobranzas');
+  if (sheets.includes('pagos'))        result.pagos        = parseSheetRows(raw.pagos,         'pagos');
+  if (sheets.includes('otros'))        result.otrosIngresos= parseSheetRows(raw.otrosIngresos, 'otros');
+  result.file = 'Google Sheets';
+  result.ts   = raw.ts || Date.now();
+  return result;
+}
+
+</script>
 </head>
 <body>
 
@@ -126,6 +216,13 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
   <a class="nav-item" href="config.html" style="margin-bottom:12px;"><span class="icon">⚙️</span> Configuración</a>
 </nav>
 
+
+  <!-- Data loading overlay -->
+  <div id="dataLoadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(13,15,20,.85);
+    backdrop-filter:blur(6px);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:14px;">
+    <div style="width:36px;height:36px;border:2px solid #2e3240;border-top-color:#e8c547;border-radius:50%;animation:spin .65s linear infinite;"></div>
+    <div style="color:#f1f3f9;font-size:13px;font-family:'Inter',sans-serif;" id="loadingMsg">Cargando datos...</div>
+  </div>
 <!-- MAIN -->
 <div class="main">
   <div class="topbar">
@@ -164,15 +261,6 @@ let chartInst = null;
 let privacyMode = false;
 
 // ── SESSION LOAD ──────────────────────────────────
-function loadFromSession(sheet) {
-  const keyMap = {cobranzas:'dashboardCob', pagos:'dashboardPag', otrosIngresos:'dashboardOtros'};
-  const raw = sessionStorage.getItem(keyMap[sheet]);
-  if (!raw) return [];
-  const data = JSON.parse(raw);
-  const rows = data[sheet] || [];
-  return rows.map(r => ({...r, Mes: r.Mes || (r.Dia ? r.Dia.slice(0,7) : '')})).filter(r => r.Dia);
-}
-
 // ── PRIVACY ───────────────────────────────────────
 function togglePrivacy() {
   privacyMode = !privacyMode;
@@ -194,29 +282,7 @@ function toggleNav(id) {
 }
 
 // ── INIT ──────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  const now = new Date();
-  const lbl = document.getElementById('todayLabel');
-  if (lbl) lbl.textContent = DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MSHORT[now.getMonth()] + ' ' + now.getFullYear();
-  try {
-    cobRows   = loadFromSession('cobranzas');
-    pagRows   = loadFromSession('pagos');
-    otrosRows = loadFromSession('otrosIngresos').filter(r =>
-      String(r.Observaciones || r.Concepto || '').includes(OI_PREFIX)
-    );
-    if (!cobRows.length && !pagRows.length) return;
-    // File label from cobranzas meta
-    const meta = sessionStorage.getItem('dashboardMeta');
-    if (meta) {
-      const m = JSON.parse(meta);
-      const mins = Math.round((Date.now() - m.ts) / 60000);
-      const ago = mins < 1 ? 'recién' : mins < 60 ? 'hace ' + mins + 'm' : 'hace ' + Math.round(mins/60) + 'h';
-      const fl = document.getElementById('fileLabel');
-      if (fl) fl.textContent = (m.file || '') + ' · ' + ago;
-    }
-    buildDashboard();
-  } catch(e) { console.warn('Error:', e); }
-});
+
 
 // ── BUILD ─────────────────────────────────────────
 function buildDashboard() {
@@ -521,6 +587,42 @@ function fmtShort(n){
 }
 function fmtMes(mes){const[y,m]=mes.split('-').map(Number);return MNAMES[m]+' '+y;}
 function fmtMesShort(mes){const[y,m]=mes.split('-').map(Number);return MSHORT[m]+' '+String(y).slice(2);}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  // Set today label
+  const _now = new Date();
+  const _days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const _ms   = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const _lbl  = document.getElementById('todayLabel');
+  if (_lbl) _lbl.textContent = _days[_now.getDay()] + ' ' + _now.getDate() + ' ' + _ms[_now.getMonth()] + ' ' + _now.getFullYear();
+
+  // Load data from API
+  const _overlay = document.getElementById('dataLoadingOverlay');
+  if (_overlay) _overlay.style.display = 'flex';
+  try {
+    const _data = await loadData(['cobranzas', 'pagos', 'otros']);
+    
+    
+    cobRows = _data.cobranzas;
+    pagRows = _data.pagos;
+    otrosRows = _data.otrosIngresos || [];
+    const _fl = document.getElementById('fileLabel');
+    const _mins = Math.round((Date.now() - _data.ts) / 60000);
+    const _ago  = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
+    if (_fl) _fl.textContent = 'Google Sheets · ' + _ago;
+    buildDashboard();
+  } catch(e) {
+    console.error('Error loading data:', e);
+    const _c = document.getElementById('contentArea');
+    if (_c) _c.innerHTML = `<div class="empty-state">
+      <span class="big">⚠️</span>
+      Error al cargar datos: ${e.message}<br>
+      <a href="index.html" style="color:var(--accent);font-size:12px;">← Volver al Dashboard</a>
+    </div>`;
+  } finally {
+    if (_overlay) _overlay.style.display = 'none';
+  }
+});
 </script>
 </body>
 </html>

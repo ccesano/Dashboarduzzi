@@ -215,17 +215,7 @@ async function syncFromSheets() {
     const ts   = raw.ts || Date.now();
     const file = 'Google Sheets';
 
-    // Save to sessionStorage (same keys as before — all other pages work unchanged)
-    sessionStorage.removeItem('dashboardCob');
-    sessionStorage.removeItem('dashboardPag');
-    sessionStorage.removeItem('dashboardOtros');
-    sessionStorage.setItem('dashboardCob',   JSON.stringify({ cobranzas,     file, ts }));
-    sessionStorage.setItem('dashboardPag',   JSON.stringify({ pagos,         file, ts }));
-    sessionStorage.setItem('dashboardOtros', JSON.stringify({ otrosIngresos, file, ts }));
-    sessionStorage.setItem('dashboardMeta',  JSON.stringify({ file, ts,
-      counts: { cobranzas: cobranzas.length, pagos: pagos.length, otrosIngresos: otrosIngresos.length }
-    }));
-
+    // Store in memory only — no sessionStorage needed
     cobRows   = cobranzas;
     pagRows   = pagos;
     otrosRows = otrosIngresos;
@@ -412,9 +402,8 @@ function loadFromSession(sheet){
 // ── INIT ──────────────────────────────────────────
 document.addEventListener('DOMContentLoaded',()=>{
   attachFileInput();
-  // Auto-sync if no data in session
-  const hasMeta = sessionStorage.getItem('dashboardMeta');
-  if (!hasMeta) { syncFromSheets(); }
+  // Auto-sync on every load
+  syncFromSheets();
   const now=new Date();
   const lbl=document.getElementById('todayLabel');
   if(lbl)lbl.textContent=DAYS[now.getDay()]+' '+now.getDate()+' '+MSHORT[now.getMonth()]+' '+now.getFullYear();
