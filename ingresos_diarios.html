@@ -733,6 +733,7 @@ function buildDashboard() {
 
     <!-- FILTERS -->
     <div class="filter-row" id="filterRow">
+      <div class="filter-chip"><label>Año</label><select id="fAnio" onchange="applyFilters('anio')"><option value="all">Todos</option></select></div>
       <div class="filter-chip"><label>Mes</label><select id="fMes" onchange="applyFilters('mes')"><option value="all">Todos</option></select></div>
       <div class="filter-chip"><label>Sucursal</label><select id="fSuc" onchange="applyFilters('suc')"><option value="all">Todas</option></select></div>
       <div class="filter-chip"><label>Concepto</label><select id="fDest" onchange="applyFilters('dest')" style="max-width:160px;"><option value="all">Todos</option></select></div>
@@ -778,14 +779,26 @@ function buildDashboard() {
 let chartInst = null;
 
 function initFilterOptions() {
-  const mNames = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const meses = [...new Set(allRows.map(r => r.Dia.slice(0,7)))].sort();
-  refreshSelect('fMes', meses, v => { const [y,m] = v.split('-'); return mNames[parseInt(m)] + ' ' + y; }, false);
-  const sucs = [...new Set(allRows.map(r => r.Sucursal))].sort();
-  refreshSelect('fSuc', sucs, v => SUC_NAMES[v] || v, false);
+  // Populate Año from all rows
+  const years = [...new Set(allRows.map(r => r.Dia.slice(0,4)))].sort();
+  refreshSelect('fAnio', years, v => v, false);
+  // Populate other filters based on all rows initially
+  rebuildCascadeFilters(allRows, allRows, allRows, allRows);
   const dias = allRows.map(r => r.Dia).sort();
   document.getElementById('fDesde').value = dias[0];
   document.getElementById('fHasta').value = dias[dias.length-1];
+}
+
+function rebuildCascadeFilters(baseForMes, baseForSuc, baseForDest, baseForCond) {
+  const mNames = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const meses = [...new Set(baseForMes.map(r => r.Dia.slice(0,7)))].sort();
+  refreshSelect('fMes',  meses, v => { const [y,m]=v.split('-'); return mNames[parseInt(m)]+' '+y; });
+  const sucs  = [...new Set(baseForSuc.map(r => r.Sucursal))].sort();
+  refreshSelect('fSuc',  sucs,  v => SUC_NAMES[v] || v);
+  const dests = [...new Set(baseForDest.map(r => r.Destino))].sort();
+  refreshSelect('fDest', dests, v => v || '(Sin concepto)');
+  const conds = [...new Set(baseForCond.map(r => r.CondicionVenta))].sort();
+  refreshSelect('fCond', conds, v => v ? (COND_NAMES[v]||v) : '(Sin condición)');
 }
 
 function refreshSelect(id, values, labelFn, keepCurrent = true) {
@@ -808,54 +821,125 @@ function refreshSelect(id, values, labelFn, keepCurrent = true) {
 }
 
 function applyFilters(changedFilter) {
-  const mes   = document.getElementById('fMes')?.value  || 'all';
-  const suc   = document.getElementById('fSuc')?.value  || 'all';
-  let   dest  = document.getElementById('fDest')?.value || 'all';
-  let   cond  = document.getElementById('fCond')?.value || 'all';
-  let   desde = document.getElementById('fDesde')?.value || '';
-  let   hasta = document.getElementById('fHasta')?.value || '';
+  let anio  = document.getElementById('fAnio')?.value || 'all';
+  let mes   = document.getElementById('fMes')?.value  || 'all';
+  let suc   = document.getElementById('fSuc')?.value  || 'all';
+  let dest  = document.getElementById('fDest')?.value || 'all';
+  let cond  = document.getElementById('fCond')?.value || 'all';
+  let desde = document.getElementById('fDesde')?.value || '';
+  let hasta = document.getElementById('fHasta')?.value || '';
 
-  // Mes <-> Fecha: mutuamente excluyentes
-  if (changedFilter === 'mes' && mes !== 'all') {
-    const [y, m] = mes.split('-').map(Number);
-    desde = `${mes}-01`;
-    hasta = new Date(y, m, 0).toISOString().slice(0, 10);
-    document.getElementById('fDesde').value = desde;
-    document.getElementById('fHasta').value = hasta;
+  // Año changed → reset Mes, Dest, Cond
+  if (changedFilter === 'anio') {
+    document.getElementById('fMes').value  = 'all';
+    document.getElementById('fDest').value = 'all';
+    document.getElementById('fCond').value = 'all';
+    mes = 'all'; dest = 'all'; cond = 'all';
+    // Update date range to year
+    if (anio !== 'all') {
+      desde = `${anio}-01-01`;
+      hasta = `${anio}-12-31`;
+      document.getElementById('fDesde').value = desde;
+      document.getElementById('fHasta').value = hasta;
+    } else {
+      const dias = allRows.map(r=>r.Dia).sort();
+      desde = dias[0]; hasta = dias[dias.length-1];
+      document.getElementById('fDesde').value = desde;
+      document.getElementById('fHasta').value = hasta;
+    }
   }
+
+  // Mes changed → reset Dest, Cond, update dates
+  if (changedFilter === 'mes') {
+    document.getElementById('fDest').value = 'all';
+    document.getElementById('fCond').value = 'all';
+    dest = 'all'; cond = 'all';
+    if (mes !== 'all') {
+      const [y, m] = mes.split('-').map(Number);
+      desde = `${mes}-01`;
+      hasta = new Date(y, m, 0).toISOString().slice(0, 10);
+      document.getElementById('fDesde').value = desde;
+      document.getElementById('fHasta').value = hasta;
+    }
+  }
+
+  // Fecha changed → reset Año y Mes
   if (changedFilter === 'fecha') {
-    document.getElementById('fMes').value = 'all';
+    document.getElementById('fAnio').value = 'all';
+    document.getElementById('fMes').value  = 'all';
   }
 
-  // Base rows: filtered by mes/suc/fecha only
-  const baseRows = allRows.filter(r => {
-    if (mes !== 'all' && !r.Dia.startsWith(mes)) return false;
-    if (suc !== 'all' && r.Sucursal !== suc)     return false;
+  // Sucursal changed → reset Dest, Cond
+  if (changedFilter === 'suc') {
+    document.getElementById('fDest').value = 'all';
+    document.getElementById('fCond').value = 'all';
+    dest = 'all'; cond = 'all';
+  }
+
+  // Concepto changed → reset Cond
+  if (changedFilter === 'dest') {
+    document.getElementById('fCond').value = 'all';
+    cond = 'all';
+  }
+
+  // ── STEP 1: filter by Año/Suc/Fecha (base for Mes options) ──
+  const rowsAfterAnio = allRows.filter(r => {
+    if (anio !== 'all' && !r.Dia.startsWith(anio)) return false;
     if (desde && r.Dia < desde) return false;
     if (hasta && r.Dia > hasta) return false;
     return true;
   });
 
-  // Rebuild Concepto and Condicion options from baseRows
-  const availDests = [...new Set(baseRows.map(r => r.Destino))].sort();
-  const availConds = [...new Set(baseRows.map(r => r.CondicionVenta))].sort();
-  const mNames = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  // ── STEP 2: update Mes options from rowsAfterAnio ──
+  const mNames = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const availMeses = [...new Set(rowsAfterAnio.map(r => r.Dia.slice(0,7)))].sort();
+  refreshSelect('fMes', availMeses, v => { const [y,m]=v.split('-'); return mNames[parseInt(m)]+' '+y; });
+  if (mes !== 'all' && !availMeses.includes(mes)) {
+    document.getElementById('fMes').value = 'all'; mes = 'all';
+  }
 
+  // ── STEP 3: filter by Mes ──
+  const rowsAfterMes = rowsAfterAnio.filter(r =>
+    mes === 'all' || r.Dia.startsWith(mes)
+  );
+
+  // ── STEP 4: update Sucursal options ──
+  const availSucs = [...new Set(rowsAfterMes.map(r => r.Sucursal))].sort();
+  refreshSelect('fSuc', availSucs, v => SUC_NAMES[v]||v);
+  if (suc !== 'all' && !availSucs.includes(suc)) {
+    document.getElementById('fSuc').value = 'all'; suc = 'all';
+  }
+
+  // ── STEP 5: filter by Sucursal ──
+  const rowsAfterSuc = rowsAfterMes.filter(r =>
+    suc === 'all' || r.Sucursal === suc
+  );
+
+  // ── STEP 6: update Concepto options ──
+  const availDests = [...new Set(rowsAfterSuc.map(r => r.Destino))].sort();
   refreshSelect('fDest', availDests, v => v || '(Sin concepto)');
-  refreshSelect('fCond', availConds, v => v ? (COND_NAMES[v] || v) : '(Sin condición)');
-
-  // If selected value no longer available, reset
   const destVal = dest === '__empty__' ? '' : dest;
-  const condVal = cond === '__empty__' ? '' : cond;
-  if (dest !== 'all' && !availDests.includes(destVal)) { document.getElementById('fDest').value = 'all'; dest = 'all'; }
-  if (cond !== 'all' && !availConds.includes(condVal)) { document.getElementById('fCond').value = 'all'; cond = 'all'; }
+  if (dest !== 'all' && !availDests.includes(destVal)) {
+    document.getElementById('fDest').value = 'all'; dest = 'all';
+  }
 
-  // Final filter
-  filtRows = baseRows.filter(r => {
-    if (dest !== 'all' && r.Destino        !== destVal) return false;
-    if (cond !== 'all' && r.CondicionVenta !== condVal) return false;
-    return true;
-  });
+  // ── STEP 7: filter by Concepto ──
+  const rowsAfterDest = rowsAfterSuc.filter(r =>
+    dest === 'all' || r.Destino === destVal
+  );
+
+  // ── STEP 8: update Condición options ──
+  const availConds = [...new Set(rowsAfterDest.map(r => r.CondicionVenta))].sort();
+  refreshSelect('fCond', availConds, v => v ? (COND_NAMES[v]||v) : '(Sin condición)');
+  const condVal = cond === '__empty__' ? '' : cond;
+  if (cond !== 'all' && !availConds.includes(condVal)) {
+    document.getElementById('fCond').value = 'all'; cond = 'all';
+  }
+
+  // ── STEP 9: final filtered rows ──
+  filtRows = rowsAfterDest.filter(r =>
+    cond === 'all' || r.CondicionVenta === condVal
+  );
 
   document.getElementById('txCount').textContent =
     filtRows.length.toLocaleString('es-AR') + ' transacciones';
@@ -870,6 +954,7 @@ function applyFilters(changedFilter) {
 }
 
 function clearFilters() {
+  document.getElementById('fAnio').value = 'all';
   document.getElementById('fMes').value  = 'all';
   document.getElementById('fSuc').value  = 'all';
   document.getElementById('fDest').value = 'all';
