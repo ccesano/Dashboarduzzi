@@ -127,6 +127,7 @@ td.amt{font-family:'DM Mono',monospace;text-align:right;color:var(--red);font-we
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.filter-chip select option{background:#1e2128;color:#f1f3f9;}
 </style>
 <script>
 // Shared data loader — used by all pages
@@ -283,9 +284,7 @@ async function loadData(sheets = ['cobranzas']) {
       <span class="topbar-date" id="todayLabel">—</span>
       <span id="fileLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
       <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()">👁 Modo privado</button>
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📤 Cargar Excel</button>
-    </div>
+      </div>
   </div>
 
   <div class="content" id="contentArea">
@@ -404,21 +403,7 @@ function toggleNav(id){
   // ── Cargar datos desde sessionStorage ──────────────────────────────────────
 
 
-// ── FILE LOAD ─────────────────────────────
-document.getElementById('fileInput').addEventListener('change',e=>{
-  const file=e.target.files[0]; if(!file)return;
-  document.getElementById('loading').classList.add('show');
-  lastFileName=file.name;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    try{
-      const wb=XLSX.read(ev.target.result,{type:'array'});
-      parseWorkbook(wb);
-    }catch(err){alert('Error: '+err.message);}
-    document.getElementById('loading').classList.remove('show');
-  };
-  reader.readAsArrayBuffer(file);
-});
+
 
 function parseDate(s){
   const m=String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -426,83 +411,7 @@ function parseDate(s){
   return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
 }
 
-function parseWorkbook(wb){
-  // Parse Pagos sheet
-  const sh=wb.Sheets['Pagos'];
-  if(!sh){alert('Hoja "Pagos" no encontrada');return;}
-  const raw=XLSX.utils.sheet_to_json(sh,{header:1,defval:''});
-  let hdrIdx=-1;
-  for(let i=0;i<Math.min(10,raw.length);i++){
-    if(String(raw[i][0]||'').trim()==='Fecha'){hdrIdx=i;break;}
-  }
-  if(hdrIdx<0){alert('No se encontró la fila "Fecha" en la hoja Pagos.');return;}
 
-  // Also need to store cobranzas rows for the shared localStorage
-  // We reuse whatever is already there and add egreso rows
-  allRows=[];
-  for(let i=hdrIdx+1;i<raw.length;i++){
-    const r=raw[i];
-    if(!r||!r[0]||String(r[0]).trim()==='')continue;
-    const dia=parseDate(String(r[0]).trim()); if(!dia)continue;
-    const monto=parseFloat(String(r[7]||'0').replace(',','.'));
-    if(isNaN(monto)||monto<=0)continue;
-    const suc=String(r[2]||'').trim();
-    if(!suc||suc==='Sucursal')continue;
-    if(SUC_ACTIVE[suc]===false)continue;
-    const destino=String(r[6]||'').trim();
-    if(isExcluded(destino))continue;
-    allRows.push({
-      Dia:dia, Mes:dia.slice(0,7),
-      Sucursal:suc,
-      Personal:String(r[3]||'').trim(),
-      Observaciones:String(r[4]||'').trim(),
-      Destino:destino,
-      Monto:monto
-    });
-  }
-  if(!allRows.length){alert('No se encontraron registros de egresos válidos.');return;}
-
-  // Save egresos data
-  try{
-    localStorage.setItem('dashboardEgresosData',JSON.stringify({rows:allRows,file:lastFileName,ts:Date.now()}));
-  }catch(e){}
-
-  // Also parse Cobranzas and save dashboardData so other screens work too
-  const shCob=wb.Sheets['Cobranzas'];
-  if(shCob){
-    try{
-      const rawCob=XLSX.utils.sheet_to_json(shCob,{header:1,defval:''});
-      let hdrCob=-1;
-      for(let i=0;i<Math.min(10,rawCob.length);i++){
-        if(String(rawCob[i][0]||'').trim()==='Fecha'){hdrCob=i;break;}
-      }
-      if(hdrCob>=0){
-        const cobRows=[];
-        for(let i=hdrCob+1;i<rawCob.length;i++){
-          const r=rawCob[i];
-          if(!r||!r[0]||String(r[0]).trim()==='')continue;
-          const dia=parseDate(String(r[0]).trim());if(!dia)continue;
-          const sub=parseFloat(String(r[8]||'0').replace(',','.'));
-          if(isNaN(sub)||sub<0)continue;
-          const suc=String(r[2]||'').trim();
-          if(!suc||suc==='Sucursal')continue;
-          cobRows.push({Dia:dia,Mes:dia.slice(0,7),Sucursal:suc,
-            Personal:String(r[3]||'').trim(),CondicionVenta:String(r[4]||'').trim(),
-            Destino:String(r[6]||'').trim(),Alumno:String(r[7]||'').trim(),Subtotal:sub});
-        }
-        if(cobRows.length){
-          localStorage.setItem('dashboardData',JSON.stringify({rows:cobRows,file:lastFileName,ts:Date.now()}));
-        }
-      }
-    }catch(e){console.warn('Error parsing Cobranzas:',e);}
-  }
-
-  const fl=document.getElementById('fileLabel');
-  if(fl) fl.textContent=lastFileName+' · recién cargado';
-  buildDashboard();
-}
-
-// ── BUILD ─────────────────────────────────
 function buildDashboard(){
   const sucs  =[...new Set(allRows.map(r=>r.Sucursal))].sort();
   const dests =[...new Set(allRows.map(r=>r.Destino))].sort();
@@ -516,6 +425,7 @@ function buildDashboard(){
     </div>
 
     <div class="filter-row">
+      <div class="filter-chip"><label>Año</label><select id="fAnio" onchange="applyFilters('anio')"><option value="all">Todos</option></select></div>
       <div class="filter-chip"><label>Mes</label><select id="fMes" onchange="applyFilters('mes')"><option value="all">Todos</option></select></div>
       <div class="filter-chip"><label>Sucursal</label><select id="fSuc" onchange="applyFilters('suc')"><option value="all">Todas</option></select></div>
       <div class="filter-chip"><label>Destino</label><select id="fDest" onchange="applyFilters('dest')" style="max-width:200px;"><option value="all">Todos</option></select></div>
@@ -543,12 +453,12 @@ function buildDashboard(){
     </div>`;
 
   document.getElementById('botRow').style.display='grid';
-  initFilters();
+  initFilterOptions();
   applyFilters();
 }
 
 // ── FILTERS ───────────────────────────────
-function initFilters(){
+function initFilterOptions(){
   const mNames=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const meses=[...new Set(allRows.map(r=>r.Dia.slice(0,7)))].sort();
   refreshSelect('fMes',meses,v=>{const[y,m]=v.split('-');return mNames[parseInt(m)]+' '+y;},false);
@@ -574,56 +484,125 @@ function refreshSelect(id,values,labelFn,keepCurrent=true){
   else if(!keepCurrent)sel.value='all';
 }
 
-function applyFilters(changedFilter){
-  const mes  =document.getElementById('fMes')?.value||'all';
-  const suc  =document.getElementById('fSuc')?.value||'all';
-  let   dest =document.getElementById('fDest')?.value||'all';
-  let   desde=document.getElementById('fDesde')?.value||'';
-  let   hasta=document.getElementById('fHasta')?.value||'';
-
-  if(changedFilter==='mes'&&mes!=='all'){
-    const[y,m]=mes.split('-').map(Number);
-    desde=`${mes}-01`;
-    hasta=new Date(y,m,0).toISOString().slice(0,10);
-    document.getElementById('fDesde').value=desde;
-    document.getElementById('fHasta').value=hasta;
-  }
-  if(changedFilter==='fecha')document.getElementById('fMes').value='all';
-
-  const baseRows=allRows.filter(r=>{
-    if(mes!=='all'&&!r.Dia.startsWith(mes))return false;
-    if(suc!=='all'&&r.Sucursal!==suc)return false;
-    if(desde&&r.Dia<desde)return false;
-    if(hasta&&r.Dia>hasta)return false;
-    return true;
-  });
-
-  const availDests=[...new Set(baseRows.map(r=>r.Destino))].sort();
-  refreshSelect('fDest',availDests,v=>v||'(Sin destino)');
-  const destVal=dest==='__empty__'?'':dest;
-  if(dest!=='all'&&!availDests.includes(destVal)){document.getElementById('fDest').value='all';dest='all';}
-
-  filtRows=baseRows.filter(r=>{
-    if(dest!=='all'&&r.Destino!==destVal)return false;
-    return true;
-  });
-
-  document.getElementById('txCount').textContent=filtRows.length.toLocaleString('es-AR')+' pagos';
-  updateKPIs();
-  updateBarChart();
-  updateDestGrid();
-  page=1;
-  renderTable();
-  renderDestRank();
+// ── FILTERS ───────────────────────────────────────
+function initFilterOptions() {
+  const years = [...new Set(allRows.map(r => r.Dia.slice(0,4)))].sort();
+  refreshSel('fAnio', years, v => v);
+  const dias = allRows.map(r => r.Dia).sort();
+  document.getElementById('fDesde').value = dias[0];
+  document.getElementById('fHasta').value = dias[dias.length-1];
+  rebuildCascade(allRows, allRows, allRows);
 }
 
-function clearFilters(){
-  document.getElementById('fMes').value='all';
-  document.getElementById('fSuc').value='all';
-  document.getElementById('fDest').value='all';
-  const dias=allRows.map(r=>r.Dia).sort();
-  document.getElementById('fDesde').value=dias[0];
-  document.getElementById('fHasta').value=dias[dias.length-1];
+function refreshSel(id, values, labelFn) {
+  const sel = document.getElementById(id); if (!sel) return;
+  const cur = sel.value;
+  const allLabel = id === 'fSuc' ? 'Todas' : 'Todos';
+  sel.innerHTML = `<option value="all">${allLabel}</option>`;
+  values.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v || '__empty__';
+    o.textContent = labelFn(v);
+    sel.appendChild(o);
+  });
+  if (cur !== 'all' && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+  else sel.value = 'all';
+}
+
+function rebuildCascade(forMes, forSuc, forDest) {
+  const mNames = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const meses = [...new Set(forMes.map(r => r.Dia.slice(0,7)))].sort();
+  refreshSel('fMes', meses, v => { const [y,m]=v.split('-'); return mNames[parseInt(m)]+' '+y; });
+  const sucs = [...new Set(forSuc.map(r => r.Sucursal))].sort();
+  refreshSel('fSuc', sucs, v => SUC_NAMES[v]||v);
+  const dests = [...new Set(forDest.map(r => r.Destino))].sort();
+  refreshSel('fDest', dests, v => v||'(Sin destino)');
+}
+
+function applyFilters(changedFilter) {
+  let anio  = document.getElementById('fAnio')?.value || 'all';
+  let mes   = document.getElementById('fMes')?.value  || 'all';
+  let suc   = document.getElementById('fSuc')?.value  || 'all';
+  let dest  = document.getElementById('fDest')?.value || 'all';
+  let desde = document.getElementById('fDesde')?.value || '';
+  let hasta = document.getElementById('fHasta')?.value || '';
+
+  // Cascades
+  if (changedFilter === 'anio') {
+    ['fMes','fSuc','fDest'].forEach(id => document.getElementById(id).value = 'all');
+    mes = 'all'; suc = 'all'; dest = 'all';
+    if (anio !== 'all') {
+      desde = `${anio}-01-01`; hasta = `${anio}-12-31`;
+      document.getElementById('fDesde').value = desde;
+      document.getElementById('fHasta').value = hasta;
+    } else {
+      const dias = allRows.map(r=>r.Dia).sort();
+      desde = dias[0]; hasta = dias[dias.length-1];
+      document.getElementById('fDesde').value = desde;
+      document.getElementById('fHasta').value = hasta;
+    }
+  }
+  if (changedFilter === 'mes') {
+    ['fSuc','fDest'].forEach(id => document.getElementById(id).value = 'all');
+    suc = 'all'; dest = 'all';
+    if (mes !== 'all') {
+      const [y,m] = mes.split('-').map(Number);
+      desde = `${mes}-01`; hasta = new Date(y,m,0).toISOString().slice(0,10);
+      document.getElementById('fDesde').value = desde;
+      document.getElementById('fHasta').value = hasta;
+    }
+  }
+  if (changedFilter === 'fecha') {
+    document.getElementById('fAnio').value = 'all';
+    document.getElementById('fMes').value  = 'all';
+  }
+  if (changedFilter === 'suc') {
+    document.getElementById('fDest').value = 'all'; dest = 'all';
+  }
+
+  // Step 1: Año + fecha
+  const r1 = allRows.filter(r => {
+    if (anio !== 'all' && !r.Dia.startsWith(anio)) return false;
+    if (desde && r.Dia < desde) return false;
+    if (hasta && r.Dia > hasta) return false;
+    return true;
+  });
+
+  // Rebuild Mes from r1
+  const mNames2 = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const availMeses = [...new Set(r1.map(r=>r.Dia.slice(0,7)))].sort();
+  refreshSel('fMes', availMeses, v => { const [y,m]=v.split('-'); return mNames2[parseInt(m)]+' '+y; });
+  if (mes !== 'all' && !availMeses.includes(mes)) { document.getElementById('fMes').value='all'; mes='all'; }
+
+  // Step 2: Mes
+  const r2 = r1.filter(r => mes === 'all' || r.Dia.startsWith(mes));
+
+  // Rebuild Sucursal from r2
+  const availSucs = [...new Set(r2.map(r=>r.Sucursal))].sort();
+  refreshSel('fSuc', availSucs, v => SUC_NAMES[v]||v);
+  if (suc !== 'all' && !availSucs.includes(suc)) { document.getElementById('fSuc').value='all'; suc='all'; }
+
+  // Step 3: Sucursal
+  const r3 = r2.filter(r => suc === 'all' || r.Sucursal === suc);
+
+  // Rebuild Destino from r3
+  const availDests = [...new Set(r3.map(r=>r.Destino))].sort();
+  refreshSel('fDest', availDests, v => v||'(Sin destino)');
+  const dv = dest === '__empty__' ? '' : dest;
+  if (dest !== 'all' && !availDests.includes(dv)) { document.getElementById('fDest').value='all'; dest='all'; }
+
+  // Step 4: Destino → final
+  filtRows = r3.filter(r => dest === 'all' || r.Destino === dv);
+
+  document.getElementById('txCount').textContent = filtRows.length.toLocaleString('es-AR') + ' pagos';
+  updateKPIs(); updateBarChart(); updateDestGrid(); page=1; renderTable(); renderDestRank();
+}
+
+function clearFilters() {
+  ['fAnio','fMes','fSuc','fDest'].forEach(id => { const el=document.getElementById(id); if(el) el.value='all'; });
+  const dias = allRows.map(r=>r.Dia).sort();
+  document.getElementById('fDesde').value = dias[0];
+  document.getElementById('fHasta').value = dias[dias.length-1];
   applyFilters();
 }
 
@@ -638,6 +617,11 @@ function updateKPIs(){
   const todayTotal=byDay[todayStr]||0;
   const hasToday=todayStr in byDay;
 
+  // Concentration: % in top 3 destinos
+  const _bd={};filtRows.forEach(r=>_bd[r.Destino]=(_bd[r.Destino]||0)+r.Monto);
+  const _top3=Object.values(_bd).sort((a,b)=>b-a).slice(0,3);
+  const concPct=total>0?_top3.reduce((s,v)=>s+v,0)/total*100:0;
+
   document.getElementById('kpiGrid').innerHTML=`
     <div class="kpi-card">
       <div class="kpi-top"><div class="kpi-title">Total Egresos</div><div class="status-dot dot-red"></div></div>
@@ -650,9 +634,12 @@ function updateKPIs(){
       <div class="kpi-bottom"><div class="kpi-status blue">● Calculado</div><div class="kpi-sub">${dias.length} días con pagos</div></div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-title">Mayor Egreso del Día</div><div class="status-dot dot-amber"></div></div>
-      <div class="kpi-value">${maxDia?fmt(maxDia[1]):'$0'}</div>
-      <div class="kpi-bottom"><div class="kpi-status amber">● Máximo</div><div class="kpi-sub">${maxDia?fmtDate(maxDia[0]):'—'}</div></div>
+      <div class="kpi-top"><div class="kpi-title">Concentración Top 3</div><div class="status-dot ${concPct>80?'dot-red':concPct>60?'dot-amber':'dot-green'}"></div></div>
+      <div class="kpi-value" style="color:${concPct>80?'var(--red)':concPct>60?'var(--accent)':'var(--green)'}">${concPct.toFixed(1)}%</div>
+      <div class="kpi-bottom">
+        <div class="kpi-status ${concPct>80?'red':concPct>60?'amber':'muted'}">● ${concPct>80?'Muy concentrado':concPct>60?'Concentrado':'Distribuido'}</div>
+        <div class="kpi-sub">del total en top 3 destinos</div>
+      </div>
     </div>
     <div class="kpi-card">
       <div class="kpi-top"><div class="kpi-title">Egresos de Hoy</div><div class="status-dot ${hasToday?'dot-red':'dot-blue'}"></div></div>

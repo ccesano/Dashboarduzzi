@@ -104,6 +104,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.filter-chip select option{background:#1e2128;color:#f1f3f9;}
 </style>
 <script>
 // Shared data loader — used by all pages
@@ -260,18 +261,14 @@ async function loadData(sheets = ['cobranzas']) {
       <span class="topbar-date" id="todayLabel">—</span>
       <span id="fileLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
       <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()">👁 Modo privado</button>
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📤 Cargar / Actualizar</button>
-    </div>
+      </div>
   </div>
 
   <div class="content" id="contentArea">
     <div class="empty-state">
-      <span class="big">📂</span>
-      Cargá el archivo desde el Dashboard principal para comenzar<br>
-      <span style="font-size:11px;color:var(--muted2);">
-        <a href="index.html" style="color:var(--red);">← Ir al Dashboard</a>
-      </span>
+      <span class="big">⏳</span>
+      Cargando datos desde Google Sheets...<br>
+      <span style="font-size:11px;color:var(--muted2);">Si no carga, <a href="index.html" style="color:var(--red);">volvé al Dashboard</a> y sincronizá</span>
     </div>
   </div>
 </div>
@@ -316,14 +313,7 @@ function applyPrivacy() {
 
 
 // ── FILE LOAD (manual update) ─────────────────────
-document.getElementById('fileInput').addEventListener('change', e => {
-  const file = e.target.files[0]; if (!file) return;
-  document.getElementById('loading').classList.add('show');
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const wb = XLSX.read(ev.target.result, { type:'array' });
-      const sh = wb.Sheets['Pagos'];
+const sh = wb.Sheets['Pagos'];
       if (!sh) { alert('Hoja "Pagos" no encontrada'); return; }
       const raw = XLSX.utils.sheet_to_json(sh, { header:1, defval:'' });
       let hdr = -1;
@@ -347,14 +337,7 @@ document.getElementById('fileInput').addEventListener('change', e => {
           Destino:String(r[6]||'').trim(), Monto:monto });
       }
       allRows = rows;
-      sessionStorage.setItem('dashboardPag', JSON.stringify({ pagos: rows, file: file.name, ts: Date.now() }));
-      document.getElementById('fileLabel').textContent = file.name + ' · recién cargado';
-      buildDashboard();
-    } catch(err) { alert('Error: '+err.message); }
-    document.getElementById('loading').classList.remove('show');
-  };
-  reader.readAsArrayBuffer(file);
-});
+      
 
 // ── AGG ───────────────────────────────────────────
 function aggByMonth(rows) {
@@ -382,22 +365,13 @@ function buildDashboard() {
     </div>
     <div class="filter-row">
       <div class="filter-chip"><label>Año</label>
-        <select id="fAnio" onchange="applyFilters()">
-          <option value="all">Todos</option>
-          ${years.map(y=>`<option value="${y}">${y}</option>`).join('')}
-        </select>
+        <select id="fAnio" onchange="applyFilters('anio')"><option value="all">Todos</option></select>
       </div>
       <div class="filter-chip"><label>Sucursal</label>
-        <select id="fSuc" onchange="applyFilters()">
-          <option value="all">Todas</option>
-          ${sucs.map(s=>`<option value="${s}">${SUC_NAMES[s]||s}</option>`).join('')}
-        </select>
+        <select id="fSuc" onchange="applyFilters('suc')"><option value="all">Todas</option></select>
       </div>
       <div class="filter-chip"><label>Destino</label>
-        <select id="fDest" onchange="applyFilters()" style="max-width:200px;">
-          <option value="all">Todos</option>
-          ${dests.map(d=>`<option value="${d}">${d}</option>`).join('')}
-        </select>
+        <select id="fDest" onchange="applyFilters('dest')" style="max-width:200px;"><option value="all">Todos</option></select>
       </div>
       <div class="filter-spacer"></div>
       <button class="clear-btn" onclick="clearFilters()">✕ Limpiar</button>
@@ -433,33 +407,87 @@ function buildDashboard() {
       <div class="month-table-wrap">
         <table class="month-table">
           <thead><tr>
-            <th onclick="sortTable('mes')"        data-col="mes">Mes</th>
-            <th onclick="sortTable('pagos')"      data-col="pagos" style="text-align:right;">Pagos</th>
-            <th onclick="sortTable('destinos')"   data-col="destinos" style="text-align:right;">Destinos</th>
-            <th onclick="sortTable('total')"      data-col="total" style="text-align:right;">Total</th>
-            <th onclick="sortTable('promDia')"    data-col="promDia" style="text-align:right;">Prom/Día</th>
-            <th onclick="sortTable('vsAnterior')" data-col="vsAnterior" style="text-align:right;">vs Mes Ant.</th>
-            <th onclick="sortTable('vsAnioAnt')"  data-col="vsAnioAnt" style="text-align:right;">vs Año Ant.</th>
-          </tr></thead>
+            <th onclick="sortTable('mes')"         data-col="mes">Mes</th>
+              <th onclick="sortTable('pagos')"       data-col="pagos" style="text-align:right;">Pagos</th>
+              <th onclick="sortTable('destinos')"    data-col="destinos" style="text-align:right;">Destinos</th>
+              <th onclick="sortTable('total')"       data-col="total" style="text-align:right;">Total</th>
+              <th onclick="sortTable('promDia')"     data-col="promDia" style="text-align:right;">Prom/Día</th>
+              <th onclick="sortTable('ticketProm')"  data-col="ticketProm" style="text-align:right;">Ticket Prom.</th>
+              <th onclick="sortTable('vsAnterior')"  data-col="vsAnterior" style="text-align:right;">vs Mes Ant.</th>
+              <th onclick="sortTable('pagosVsAnt')"  data-col="pagosVsAnt" style="text-align:right;">Pagos vs Ant.</th>
+            </tr></thead>
           <tbody id="tableBody"></tbody>
         </table>
       </div>
     </div>`;
 
+  initFilterOptions();
   applyFilters();
 }
 
 // ── FILTERS ───────────────────────────────────────
-function applyFilters() {
-  const anio = document.getElementById('fAnio')?.value || 'all';
-  const suc  = document.getElementById('fSuc')?.value  || 'all';
-  const dest = document.getElementById('fDest')?.value || 'all';
-  filtRows = allRows.filter(r => {
-    if (anio !== 'all' && !r.Mes.startsWith(anio)) return false;
-    if (suc  !== 'all' && r.Sucursal !== suc)       return false;
-    if (dest !== 'all' && r.Destino  !== dest)       return false;
-    return true;
+// ── FILTERS ───────────────────────────────────────
+function initFilterOptions() {
+  const years = [...new Set(allRows.map(r => r.Mes.slice(0,4)))].sort();
+  refreshSel('fAnio', years, v => v);
+  rebuildCascade(allRows, allRows, allRows);
+}
+
+function refreshSel(id, values, labelFn) {
+  const sel = document.getElementById(id); if (!sel) return;
+  const cur = sel.value;
+  const allLabel = id === 'fSuc' ? 'Todas' : 'Todos';
+  sel.innerHTML = `<option value="all">${allLabel}</option>`;
+  values.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v || '__empty__';
+    o.textContent = labelFn(v);
+    sel.appendChild(o);
   });
+  if (cur !== 'all' && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+  else sel.value = 'all';
+}
+
+function rebuildCascade(forSuc, forDest) {
+  const sucs = [...new Set(forSuc.map(r => r.Sucursal))].sort();
+  refreshSel('fSuc', sucs, v => SUC_NAMES[v]||v);
+  const dests = [...new Set(forDest.map(r => r.Destino))].sort();
+  refreshSel('fDest', dests, v => v||'(Sin destino)');
+}
+
+function applyFilters(changedFilter) {
+  let anio = document.getElementById('fAnio')?.value || 'all';
+  let suc  = document.getElementById('fSuc')?.value  || 'all';
+  let dest = document.getElementById('fDest')?.value || 'all';
+
+  if (changedFilter === 'anio') {
+    ['fSuc','fDest'].forEach(id => document.getElementById(id).value = 'all');
+    suc = 'all'; dest = 'all';
+  }
+  if (changedFilter === 'suc') {
+    document.getElementById('fDest').value = 'all'; dest = 'all';
+  }
+
+  // Step 1: Año
+  const r1 = allRows.filter(r => anio === 'all' || r.Mes.startsWith(anio));
+
+  // Rebuild Sucursal
+  const availSucs = [...new Set(r1.map(r=>r.Sucursal))].sort();
+  refreshSel('fSuc', availSucs, v => SUC_NAMES[v]||v);
+  if (suc !== 'all' && !availSucs.includes(suc)) { document.getElementById('fSuc').value='all'; suc='all'; }
+
+  // Step 2: Sucursal
+  const r2 = r1.filter(r => suc === 'all' || r.Sucursal === suc);
+
+  // Rebuild Destino
+  const availDests = [...new Set(r2.map(r=>r.Destino))].sort();
+  refreshSel('fDest', availDests, v => v||'(Sin destino)');
+  const dv = dest === '__empty__' ? '' : dest;
+  if (dest !== 'all' && !availDests.includes(dv)) { document.getElementById('fDest').value='all'; dest='all'; }
+
+  // Step 3: Destino → final
+  filtRows = r2.filter(r => dest === 'all' || r.Destino === dv);
+
   document.getElementById('txCount').textContent = filtRows.length.toLocaleString('es-AR') + ' pagos';
   updateKPIs(); updateBarChart(); updateSucBreakdown(); updateYYCompare(); updateDestChart(); renderTable();
 }
@@ -619,15 +647,16 @@ function renderTable() {
   }
   const lastMes = meses[meses.length-1];
   const rows = meses.map(mes => {
-    const a=agg[mes];
-    const [y,m]=mes.split('-').map(Number);
-    const prevMes   =`${String(y).padStart(4,'0')}-${String(m===1?12:m-1).padStart(2,'0')}`;
-    const prevAnoMes=`${String(y-1).padStart(4,'0')}-${mes.slice(5)}`;
-    const pM=agg[prevMes], pA=agg[prevAnoMes];
-    const vsAnt =pM?(a.total-pM.total)/pM.total*100:null;
-    const vsAnio=pA?(a.total-pA.total)/pA.total*100:null;
-    const promDia=a.dias.size?a.total/a.dias.size:0;
-    return {mes,total:a.total,pagos:a.pagos,destinos:a.destinos.size,promDia,vsAnterior:vsAnt,vsAnioAnt:vsAnio};
+    const a = agg[mes];
+    const [y,mn] = mes.split('-').map(Number);
+    const prevMes = `${String(y).padStart(4,'0')}-${String(mn===1?12:mn-1).padStart(2,'0')}`;
+    const pMes = agg[prevMes];
+    const vsAnt      = pMes ? (a.total - pMes.total) / pMes.total * 100 : null;
+    const pagosVsAnt = pMes ? a.pagos - pMes.pagos : null;
+    const promDia    = a.dias.size ? a.total / a.dias.size : 0;
+    const ticketProm = a.pagos > 0 ? a.total / a.pagos : 0;
+    return { mes, total:a.total, pagos:a.pagos, destinos:a.destinos.size,
+      promDia, ticketProm, vsAnterior:vsAnt, pagosVsAnt };
   });
   rows.sort((a,b)=>{
     const va=a[sortCol],vb=b[sortCol];
@@ -649,8 +678,11 @@ function renderTable() {
       <td class="num">${r.destinos.toLocaleString('es-AR')}</td>
       <td class="amt privacy-amt">${fmt(r.total)}</td>
       <td class="num muted privacy-amt">${fmt(r.promDia)}</td>
+      <td class="num muted privacy-amt">${fmt(r.ticketProm)}</td>
       ${deltaCell(r.vsAnterior)}
-      ${deltaCell(r.vsAnioAnt)}
+      <td class="num" style="color:${r.pagosVsAnt===null?'var(--muted2)':r.pagosVsAnt>=0?'var(--red)':'var(--green)'}">
+        ${r.pagosVsAnt===null?'—':(r.pagosVsAnt>=0?'+':'')+r.pagosVsAnt.toLocaleString('es-AR')}
+      </td>
     </tr>`).join('');
   if (privacyMode) applyPrivacy();
 }
