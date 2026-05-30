@@ -312,32 +312,7 @@ function applyPrivacy() {
 // ── INIT ──────────────────────────────────────────
 
 
-// ── FILE LOAD (manual update) ─────────────────────
-const sh = wb.Sheets['Pagos'];
-      if (!sh) { alert('Hoja "Pagos" no encontrada'); return; }
-      const raw = XLSX.utils.sheet_to_json(sh, { header:1, defval:'' });
-      let hdr = -1;
-      for (let i=0; i<Math.min(10,raw.length); i++) {
-        if (String(raw[i][0]||'').trim()==='Fecha') { hdr=i; break; }
-      }
-      if (hdr < 0) { alert('No se encontró fila de encabezados'); return; }
-      const rows = [];
-      for (let i=hdr+1; i<raw.length; i++) {
-        const r = raw[i];
-        if (!r[0]||String(r[0]).trim()==='') continue;
-        const m = String(r[0]).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-        if (!m) continue;
-        const dia = m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
-        const monto = parseFloat(String(r[7]||'0').replace(',','.'));
-        if (isNaN(monto)||monto<=0) continue;
-        const suc = String(r[2]||'').trim();
-        if (!suc||suc==='Sucursal') continue;
-        rows.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
-          Personal:String(r[3]||'').trim(), Observaciones:String(r[4]||'').trim(),
-          Destino:String(r[6]||'').trim(), Monto:monto });
-      }
-      allRows = rows;
-      
+
 
 // ── AGG ───────────────────────────────────────────
 function aggByMonth(rows) {
