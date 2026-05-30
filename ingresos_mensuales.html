@@ -345,13 +345,7 @@ const MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct
   // ── Cargar datos desde sessionStorage ──────────────────────────────────────
 
 
-// ── FILE LOAD ─────────────────────────────────────
-parseWorkbook(wb);
-    } catch(err) { alert('Error: ' + err.message); }
-    document.getElementById('loading').classList.remove('show');
-  };
-  reader.readAsArrayBuffer(file);
-});
+
 
 function parseDate(s) {
   const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
