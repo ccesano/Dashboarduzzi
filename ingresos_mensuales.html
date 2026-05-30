@@ -119,6 +119,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.filter-chip select option{background:#1e2128;color:#f1f3f9;}
 </style>
 <script>
 // Shared data loader — used by all pages
@@ -276,9 +277,7 @@ async function loadData(sheets = ['cobranzas']) {
       <span class="topbar-date" id="todayLabel">—</span>
       <span id="fileLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
       <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()" title="Ocultar montos">👁 Modo privado</button>
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📂 Cargar / Actualizar</button>
-    </div>
+      </div>
   </div>
 
   <div class="content" id="contentArea">
@@ -334,15 +333,7 @@ const MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct
 
 
 // ── FILE LOAD ─────────────────────────────────────
-document.getElementById('fileInput').addEventListener('change', e => {
-  const file = e.target.files[0]; if (!file) return;
-  document.getElementById('loading').classList.add('show');
-  lastFileName = file.name;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const wb = XLSX.read(ev.target.result, { type: 'array' });
-      parseWorkbook(wb);
+parseWorkbook(wb);
     } catch(err) { alert('Error: ' + err.message); }
     document.getElementById('loading').classList.remove('show');
   };
@@ -355,37 +346,7 @@ function parseDate(s) {
   return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
 }
 
-function parseWorkbook(wb) {
-  const sh = wb.Sheets['Cobranzas'];
-  if (!sh) { alert('Hoja "Cobranzas" no encontrada'); return; }
-  const raw = XLSX.utils.sheet_to_json(sh, { header: 1, defval: '' });
-  let hdrIdx = -1;
-  for (let i = 0; i < Math.min(10, raw.length); i++) {
-    if (String(raw[i][0] || '').trim() === 'Fecha') { hdrIdx = i; break; }
-  }
-  if (hdrIdx < 0) { alert('No se encontró la fila "Fecha". ¿Está el archivo desmergeado?'); return; }
-  allRows = [];
-  for (let i = hdrIdx + 1; i < raw.length; i++) {
-    const r = raw[i];
-    if (!r || !r[0] || String(r[0]).trim() === '') continue;
-    const dia = parseDate(String(r[0]).trim()); if (!dia) continue;
-    const sub = parseFloat(String(r[8] || '0').replace(',', '.'));
-    if (isNaN(sub) || sub < 0) continue;
-    const suc = String(r[2] || '').trim();
-    if (!suc || suc === 'Sucursal') continue;
-    if (SUC_ACTIVE[suc] === false) continue;
-    allRows.push({ Dia: dia, Mes: dia.slice(0,7), Sucursal: suc,
-      Personal: String(r[3]||'').trim(), CondicionVenta: String(r[4]||'').trim(),
-      Destino: String(r[6]||'').trim(), Alumno: String(r[7]||'').trim(), Subtotal: sub });
-  }
-  if (!allRows.length) { alert('No se encontraron registros.'); return; }
-  try {
-    localStorage.setItem('dashboardData', JSON.stringify({ rows: allRows, file: lastFileName, ts: Date.now() }));
-  } catch(e) {}
-  const fileLbl = document.getElementById('fileLabel');
-  if (fileLbl) fileLbl.textContent = lastFileName + ' · recién cargado';
-  buildDashboard();
-}
+
 
 // ── BUILD ─────────────────────────────────────────
 function buildDashboard() {
@@ -401,19 +362,17 @@ function buildDashboard() {
 
     <div class="filter-row">
       <div class="filter-chip"><label>Año</label>
-        <select id="fAnio" onchange="applyFilters()"><option value="all">Todos</option></select></div>
+        <select id="fAnio" onchange="applyFilters('anio')"><option value="all">Todos</option></select>
+      </div>
       <div class="filter-chip"><label>Sucursal</label>
-        <select id="fSuc" onchange="applyFilters()"><option value="all">Todas</option>
-        ${sucs.map(s => `<option value="${s}">${SUC_NAMES[s]||s}</option>`).join('')}
-        </select></div>
+        <select id="fSuc" onchange="applyFilters('suc')"><option value="all">Todas</option></select>
+      </div>
       <div class="filter-chip"><label>Concepto</label>
-        <select id="fDest" onchange="applyFilters()" style="max-width:160px;"><option value="all">Todos</option>
-        ${dests.map(d => `<option value="${d}">${d||'(Sin concepto)'}</option>`).join('')}
-        </select></div>
+        <select id="fDest" onchange="applyFilters('dest')" style="max-width:160px;"><option value="all">Todos</option></select>
+      </div>
       <div class="filter-chip"><label>Cond. Pago</label>
-        <select id="fCond" onchange="applyFilters()"><option value="all">Todas</option>
-        ${conds.map(c => `<option value="${c}">${COND_NAMES[c]||c||'(Sin condición)'}</option>`).join('')}
-        </select></div>
+        <select id="fCond" onchange="applyFilters('cond')"><option value="all">Todas</option></select>
+      </div>
       <div class="filter-spacer"></div>
       <button class="clear-btn" onclick="clearFilters()">✕ Limpiar</button>
     </div>
@@ -453,13 +412,14 @@ function buildDashboard() {
         <table class="month-table">
           <thead>
             <tr>
-              <th onclick="sortTable('mes')"       data-col="mes">Mes</th>
-              <th onclick="sortTable('cobros')"    data-col="cobros" style="text-align:right;">Cobros</th>
-              <th onclick="sortTable('alumnos')"   data-col="alumnos" style="text-align:right;">Alumnos</th>
-              <th onclick="sortTable('total')"     data-col="total" style="text-align:right;">Total</th>
-              <th onclick="sortTable('promDia')"   data-col="promDia" style="text-align:right;">Prom/Día</th>
-              <th onclick="sortTable('vsAnterior')" data-col="vsAnterior" style="text-align:right;">vs Mes Ant.</th>
-              <th onclick="sortTable('vsAnioAnt')" data-col="vsAnioAnt" style="text-align:right;">vs Año Ant.</th>
+              <th onclick="sortTable('mes')"         data-col="mes">Mes</th>
+              <th onclick="sortTable('cobros')"      data-col="cobros" style="text-align:right;">Cobros</th>
+              <th onclick="sortTable('alumnos')"     data-col="alumnos" style="text-align:right;">Alumnos</th>
+              <th onclick="sortTable('total')"       data-col="total" style="text-align:right;">Total</th>
+              <th onclick="sortTable('promDia')"     data-col="promDia" style="text-align:right;">Prom/Día</th>
+              <th onclick="sortTable('ticketProm')"  data-col="ticketProm" style="text-align:right;">Ticket Prom.</th>
+              <th onclick="sortTable('vsAnterior')"  data-col="vsAnterior" style="text-align:right;">vs Mes Ant.</th>
+              <th onclick="sortTable('cobrosVsAnt')" data-col="cobrosVsAnt" style="text-align:right;">Cobros vs Ant.</th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -473,37 +433,92 @@ function buildDashboard() {
   const fAnio = document.getElementById('fAnio');
   years.forEach(y => { const o = document.createElement('option'); o.value = y; o.textContent = y; fAnio.appendChild(o); });
 
+  initFilters();
   applyFilters();
 }
 
 // ── FILTERS ───────────────────────────────────────
-function applyFilters() {
-  const anio = document.getElementById('fAnio')?.value || 'all';
-  const suc  = document.getElementById('fSuc')?.value  || 'all';
-  const dest = document.getElementById('fDest')?.value || 'all';
-  const cond = document.getElementById('fCond')?.value || 'all';
+function initFilters() {
+  const years = [...new Set(allRows.map(r => r.Mes.slice(0,4)))].sort();
+  refreshSel('fAnio', years, v => v);
+  rebuildAll(allRows, allRows, allRows);
+}
 
-  filtRows = allRows.filter(r => {
-    if (anio !== 'all' && !r.Mes.startsWith(anio)) return false;
-    if (suc  !== 'all' && r.Sucursal !== suc)       return false;
-    if (dest !== 'all' && r.Destino  !== dest)       return false;
-    if (cond !== 'all' && r.CondicionVenta !== cond) return false;
-    return true;
+function refreshSel(id, values, labelFn) {
+  const sel = document.getElementById(id); if (!sel) return;
+  const cur = sel.value;
+  const allLabel = id === 'fSuc' ? 'Todas' : 'Todos';
+  sel.innerHTML = `<option value="all">${allLabel}</option>`;
+  values.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v || '__empty__';
+    o.textContent = labelFn(v);
+    sel.appendChild(o);
   });
+  if (cur !== 'all' && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+  else sel.value = 'all';
+}
+
+function rebuildAll(forSuc, forDest, forCond) {
+  const sucs  = [...new Set(forSuc.map(r => r.Sucursal))].sort();
+  refreshSel('fSuc',  sucs,  v => SUC_NAMES[v]||v);
+  const dests = [...new Set(forDest.map(r => r.Destino))].sort();
+  refreshSel('fDest', dests, v => v||'(Sin concepto)');
+  const conds = [...new Set(forCond.map(r => r.CondicionVenta))].sort();
+  refreshSel('fCond', conds, v => v?(COND_NAMES[v]||v):'(Sin condición)');
+}
+
+function applyFilters(changedFilter) {
+  let anio = document.getElementById('fAnio')?.value || 'all';
+  let suc  = document.getElementById('fSuc')?.value  || 'all';
+  let dest = document.getElementById('fDest')?.value || 'all';
+  let cond = document.getElementById('fCond')?.value || 'all';
+
+  if (changedFilter==='anio') {
+    ['fSuc','fDest','fCond'].forEach(id=>{document.getElementById(id).value='all';});
+    suc='all'; dest='all'; cond='all';
+  }
+  if (changedFilter==='suc') {
+    ['fDest','fCond'].forEach(id=>{document.getElementById(id).value='all';});
+    dest='all'; cond='all';
+  }
+  if (changedFilter==='dest') {
+    document.getElementById('fCond').value='all'; cond='all';
+  }
+
+  // Step 1: Año
+  const r1 = allRows.filter(r => anio==='all' || r.Mes.startsWith(anio));
+  // Rebuild Suc from r1
+  const availSucs = [...new Set(r1.map(r=>r.Sucursal))].sort();
+  refreshSel('fSuc', availSucs, v=>SUC_NAMES[v]||v);
+  if (suc!=='all' && !availSucs.includes(suc)) { document.getElementById('fSuc').value='all'; suc='all'; }
+
+  // Step 2: Sucursal
+  const r2 = r1.filter(r => suc==='all' || r.Sucursal===suc);
+  // Rebuild Dest from r2
+  const availDests = [...new Set(r2.map(r=>r.Destino))].sort();
+  refreshSel('fDest', availDests, v=>v||'(Sin concepto)');
+  const dv = dest==='__empty__'?'':dest;
+  if (dest!=='all' && !availDests.includes(dv)) { document.getElementById('fDest').value='all'; dest='all'; }
+
+  // Step 3: Concepto
+  const r3 = r2.filter(r => dest==='all' || r.Destino===(dest==='__empty__'?'':dest));
+  // Rebuild Cond from r3
+  const availConds = [...new Set(r3.map(r=>r.CondicionVenta))].sort();
+  refreshSel('fCond', availConds, v=>v?(COND_NAMES[v]||v):'(Sin condición)');
+  const cv = cond==='__empty__'?'':cond;
+  if (cond!=='all' && !availConds.includes(cv)) { document.getElementById('fCond').value='all'; cond='all'; }
+
+  // Step 4: Condición → final
+  filtRows = r3.filter(r => cond==='all' || r.CondicionVenta===(cond==='__empty__'?'':cond));
 
   document.getElementById('txCount').textContent = filtRows.length.toLocaleString('es-AR') + ' transacciones';
-  updateKPIs();
-  updateBarChart();
-  updateSucBreakdown();
-  updateYYCompare();
-  updateCondChart();
-  renderTable();
+  updateKPIs(); updateBarChart(); updateSucBreakdown(); updateYYCompare(); updateCondChart(); renderTable();
 }
 
 function clearFilters() {
   ['fAnio','fSuc','fDest','fCond'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = 'all';
+    const el = document.getElementById(id); if (el) el.value = 'all';
   });
   applyFilters();
 }
@@ -580,11 +595,19 @@ function updateBarChart() {
     type: 'bar',
     data: {
       labels: meses.map(fmtMesShort),
-      datasets: [{ data, backgroundColor: grad, borderRadius: 5, borderWidth: 0 }]
+      datasets: [{ data, backgroundColor: grad, borderRadius: 5, borderWidth: 0 },
+        { label:'Tendencia', data:(() => {
+          const _c=meses.map(m2=>(agg[m2]||{cobros:0}).cobros);
+          const _n=_c.length,_avg=data.reduce((s,v)=>s+v,0)/Math.max(_c.reduce((s,v)=>s+v,0),1);
+          const _sX=_n*(_n-1)/2,_sY=_c.reduce((s,v)=>s+v,0),_sXY=_c.reduce((s,v,j)=>s+j*v,0),_sX2=_c.reduce((s,v,j)=>s+j*j,0);
+          const _sl=_n>1?(_n*_sXY-_sX*_sY)/(_n*_sX2-_sX*_sX):0,_ic=(_sY-_sl*_sX)/Math.max(_n,1);
+          return meses.map((_,j)=>Math.max(0,(_ic+_sl*j)*_avg));
+        })(), type:'line', borderColor:'rgba(232,197,71,0.6)', backgroundColor:'transparent',
+          borderWidth:2, borderDash:[5,5], pointRadius:0, tension:0.3 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) }}},
+      plugins: { legend: { display: true, labels:{color:'#6b7280',font:{size:11},boxWidth:12,padding:12} }, tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) }}},
       scales: {
         x: { grid: { display: false }, ticks: { color: '#4b5563', font: { size: 10 } } },
         y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#4b5563', font: { size: 10 }, callback: v => fmtShort(v) } }
@@ -690,7 +713,7 @@ function updateCondChart() {
     },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) }}},
+      plugins: { legend: { display: true, labels:{color:'#6b7280',font:{size:11},boxWidth:12,padding:12} }, tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) }}},
       scales: {
         x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color:'#4b5563', font:{size:10}, callback: v => fmtShort(v) }},
         y: { grid: { display: false }, ticks: { color: '#7a7f96', font: { size: 11 } } }
@@ -724,18 +747,16 @@ function renderTable() {
   // Build rows with comparisons
   const rows = meses.map(mes => {
     const a = agg[mes];
-    const [y,m] = mes.split('-').map(Number);
-    const prevMes  = `${String(y).padStart(4,'0')}-${String(m-1 || 12).padStart(2,'0')}`;
-    const prevYear = `${String(m===1?y-1:y).padStart(4,'0')}-${String(m-1||12).padStart(2,'0')}`;
-    const prevAnoMes = `${String(y-1).padStart(4,'0')}-${mes.slice(5)}`;
-    const pMes  = agg[prevMes];
-    const pAnio = agg[prevAnoMes];
-    const vsAnt  = pMes  ? (a.total - pMes.total)  / pMes.total  * 100 : null;
-    const vsAnio = pAnio ? (a.total - pAnio.total) / pAnio.total * 100 : null;
-    const promDia = a.dias.size ? a.total / a.dias.size : 0;
+    const [y,mn] = mes.split('-').map(Number);
+    const prevMes = `${String(y).padStart(4,'0')}-${String(mn===1?12:mn-1).padStart(2,'0')}`;
+    const pMes    = agg[prevMes];
+    const vsAnt       = pMes ? (a.total - pMes.total) / pMes.total * 100 : null;
+    const cobrosVsAnt = pMes ? a.cobros - pMes.cobros : null;
+    const promDia     = a.dias.size ? a.total / a.dias.size : 0;
+    const ticketProm  = a.cobros > 0 ? a.total / a.cobros : 0;
     return { mes, total: a.total, cobros: a.cobros,
       alumnos: a.alumnos.size, dias: a.dias.size,
-      promDia, vsAnterior: vsAnt, vsAnioAnt: vsAnio };
+      promDia, ticketProm, vsAnterior: vsAnt, cobrosVsAnt };
   });
 
   rows.sort((a,b) => {
@@ -760,8 +781,11 @@ function renderTable() {
       <td class="num">${r.alumnos.toLocaleString('es-AR')}</td>
       <td class="amt privacy-amt">${fmt(r.total)}</td>
       <td class="num muted privacy-amt">${fmt(r.promDia)}</td>
+      <td class="num muted privacy-amt">${fmt(r.ticketProm)}</td>
       ${deltaCell(r.vsAnterior)}
-      ${deltaCell(r.vsAnioAnt)}
+      <td class="num" style="color:${r.cobrosVsAnt===null?'var(--muted2)':r.cobrosVsAnt>=0?'var(--green)':'var(--red)'}">
+        ${r.cobrosVsAnt===null?'—':(r.cobrosVsAnt>=0?'+':'')+r.cobrosVsAnt.toLocaleString('es-AR')}
+      </td>
     </tr>`;
   }).join('');
   if (privacyMode) applyPrivacy();
