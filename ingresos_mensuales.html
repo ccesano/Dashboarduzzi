@@ -282,14 +282,27 @@ async function loadData(sheets = ['cobranzas']) {
 
   <div class="content" id="contentArea">
     <div class="empty-state">
-      <span class="big">📂</span>
-      Cargá el archivo de exportación de Caja para comenzar<br>
-      <span style="font-size:11px;color:var(--muted2);">Usá el botón "Cargar Excel" arriba a la derecha</span>
+      <span class="big">⏳</span>
+      Cargando datos desde Google Sheets...<br>
+      <span style="font-size:11px;color:var(--muted2);">Si no carga, <a href="index.html" style="color:var(--accent);">volvé al Dashboard</a> y sincronizá</span>
     </div>
   </div>
 </div>
 
 <script>
+// Catch any JS errors and show them
+window.onerror = function(msg, src, line, col, err) {
+  const c = document.getElementById('contentArea');
+  if (c && c.querySelector('.big')) {
+    c.innerHTML = `<div class="empty-state">
+      <span class="big">⚠️</span>
+      Error JS: ${msg}<br>
+      <span style="font-size:11px;color:var(--muted2);">Línea ${line} — ${src?.split('/').pop()}</span><br>
+      <a href="index.html" style="color:var(--accent);font-size:12px;">← Volver al Dashboard</a>
+    </div>`;
+  }
+  return false;
+};
 const COND_NAMES = cfg.conditionNames || {};
 const SUC_COLORS = { Alvarado:'#3b82f6', Caseros:'#a855f7', España:'#22c55e', Doris:'#f97316' };
 const PALETTE    = ['#e8c547','#3b82f6','#22c55e','#a855f7','#f97316','#ef4444','#06b6d4'];
