@@ -637,6 +637,15 @@ function sortTable(col) {
   renderTable();
 }
 
+
+function deltaCell(v) {
+  if (v === null) return `<td class="num" style="color:var(--muted2)">—</td>`;
+  // For egresos: increase is bad (red), decrease is good (green)
+  const isUp = v >= 0;
+  const sign = v >= 0 ? '+' : '';
+  return `<td class="num" style="color:${isUp?'var(--red)':'var(--green)'};font-family:'DM Mono',monospace;">${sign}${v.toFixed(1)}%</td>`;
+}
+
 function renderTable() {
   const agg   = aggByMonth(filtRows);
   const meses = Object.keys(agg).sort();
@@ -698,35 +707,40 @@ function fmtMes(mes){const[y,m]=mes.split('-').map(Number);return MNAMES[m]+' '+
 function fmtMesShort(mes){const[y,m]=mes.split('-').map(Number);return MSHORT[m]+' '+String(y).slice(2);}
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Set today label
   const _now = new Date();
   const _days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
   const _ms   = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const _lbl  = document.getElementById('todayLabel');
   if (_lbl) _lbl.textContent = _days[_now.getDay()] + ' ' + _now.getDate() + ' ' + _ms[_now.getMonth()] + ' ' + _now.getFullYear();
 
-  // Load data from API
   const _overlay = document.getElementById('dataLoadingOverlay');
+  const _c = document.getElementById('contentArea');
   if (_overlay) _overlay.style.display = 'flex';
   try {
     const _data = await loadData(['pagos']);
-    
+    if (!_data?.pagos?.length) throw new Error('Sin datos de pagos — verificá la hoja "Pagos" en Google Sheets');
     allRows = _data.pagos;
-    
-    
-    
     const _fl = document.getElementById('fileLabel');
     const _mins = Math.round((Date.now() - _data.ts) / 60000);
-    const _ago  = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
+    const _ago = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
     if (_fl) _fl.textContent = 'Google Sheets · ' + _ago;
-    buildDashboard();
+    try {
+      buildDashboard();
+    } catch(buildErr) {
+      console.error('buildDashboard error:', buildErr);
+      if (_c) _c.innerHTML = `<div class="empty-state">
+        <span class="big">⚠️</span>
+        Error en buildDashboard: ${buildErr.message}<br>
+        <span style="font-size:11px;color:var(--muted2);">${(buildErr.stack||'').split('\n').slice(0,2).join(' | ')}</span><br>
+        <a href="index.html" style="color:var(--red);font-size:12px;">← Volver al Dashboard</a>
+      </div>`;
+    }
   } catch(e) {
-    console.error('Error loading data:', e);
-    const _c = document.getElementById('contentArea');
+    console.error('Load error:', e);
     if (_c) _c.innerHTML = `<div class="empty-state">
       <span class="big">⚠️</span>
-      Error al cargar datos: ${e.message}<br>
-      <a href="index.html" style="color:var(--accent);font-size:12px;">← Volver al Dashboard</a>
+      ${e.message}<br>
+      <a href="index.html" style="color:var(--red);font-size:12px;">← Volver al Dashboard</a>
     </div>`;
   } finally {
     if (_overlay) _overlay.style.display = 'none';
