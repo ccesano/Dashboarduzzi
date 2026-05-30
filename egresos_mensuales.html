@@ -426,11 +426,10 @@ function buildDashboard() {
 }
 
 // ── FILTERS ───────────────────────────────────────
-// ── FILTERS ───────────────────────────────────────
 function initFilterOptions() {
   const years = [...new Set(allRows.map(r => r.Mes.slice(0,4)))].sort();
   refreshSel('fAnio', years, v => v);
-  rebuildCascade(allRows, allRows, allRows);
+  rebuildCascade(allRows, allRows);
 }
 
 function refreshSel(id, values, labelFn) {
