@@ -822,34 +822,39 @@ function fmtMesShort(mes) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Set today label
   const _now = new Date();
   const _days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
   const _ms   = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const _lbl  = document.getElementById('todayLabel');
   if (_lbl) _lbl.textContent = _days[_now.getDay()] + ' ' + _now.getDate() + ' ' + _ms[_now.getMonth()] + ' ' + _now.getFullYear();
 
-  // Load data from API
   const _overlay = document.getElementById('dataLoadingOverlay');
+  const _c = document.getElementById('contentArea');
   if (_overlay) _overlay.style.display = 'flex';
   try {
     const _data = await loadData(['cobranzas']);
+    if (!_data || !_data.cobranzas) throw new Error('No se recibieron datos de cobranzas');
     allRows = _data.cobranzas;
-    
-    
-    
-    
+    if (!allRows.length) throw new Error('La hoja Cobranzas está vacía o no tiene el formato esperado');
     const _fl = document.getElementById('fileLabel');
     const _mins = Math.round((Date.now() - _data.ts) / 60000);
     const _ago  = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
     if (_fl) _fl.textContent = 'Google Sheets · ' + _ago;
-    buildDashboard();
+    try {
+      buildDashboard();
+    } catch(buildErr) {
+      if (_c) _c.innerHTML = `<div class="empty-state">
+        <span class="big">⚠️</span>
+        Error en buildDashboard: ${buildErr.message}<br>
+        <span style="font-size:11px;color:var(--muted2);">${buildErr.stack?.split('\n')[1]||''}</span><br>
+        <a href="index.html" style="color:var(--accent);font-size:12px;">← Volver al Dashboard</a>
+      </div>`;
+    }
   } catch(e) {
-    console.error('Error loading data:', e);
-    const _c = document.getElementById('contentArea');
+    console.error('Error:', e);
     if (_c) _c.innerHTML = `<div class="empty-state">
       <span class="big">⚠️</span>
-      Error al cargar datos: ${e.message}<br>
+      ${e.message}<br>
       <a href="index.html" style="color:var(--accent);font-size:12px;">← Volver al Dashboard</a>
     </div>`;
   } finally {
