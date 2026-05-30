@@ -44,7 +44,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 .filter-spacer{flex:1;}
 .clear-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;}
 /* KPIs */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
 .kpi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
 .kpi-title{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.4px;}
@@ -95,6 +95,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.filter-chip select option{background:#1e2128;color:#f1f3f9;}
 </style>
 <script>
 // Shared data loader — used by all pages
@@ -257,11 +258,9 @@ async function loadData(sheets = ['cobranzas']) {
 
   <div class="content" id="contentArea">
     <div class="empty-state">
-      <span class="big">📊</span>
-      No hay datos cargados<br>
-      <span style="font-size:11px;color:var(--muted2);">
-        <a href="index.html" style="color:var(--accent);">← Volver al Dashboard para cargar el Excel</a>
-      </span>
+      <span class="big">⏳</span>
+      Cargando datos desde Google Sheets...<br>
+      <span style="font-size:11px;color:var(--muted2);">Si no carga, <a href="index.html" style="color:var(--accent);">volvé al Dashboard</a> y sincronizá</span>
     </div>
   </div>
 </div>
@@ -320,15 +319,13 @@ function buildDashboard() {
 
     <div class="filter-row">
       <div class="filter-chip"><label>Año</label>
-        <select id="fAnio" onchange="applyFilters()">
+        <select id="fAnio" onchange="applyFilters('anio')">
           <option value="all">Todos</option>
-          ${years.map(y=>`<option value="${y}">${y}</option>`).join('')}
         </select>
       </div>
       <div class="filter-chip"><label>Sucursal</label>
-        <select id="fSuc" onchange="applyFilters()">
+        <select id="fSuc" onchange="applyFilters('suc')">
           <option value="all">Todas</option>
-          ${sucs.map(s=>`<option value="${s}">${SUC_NAMES[s]||s}</option>`).join('')}
         </select>
       </div>
       <div class="filter-spacer"></div>
@@ -356,42 +353,72 @@ function buildDashboard() {
       <div class="res-table-wrap">
         <table class="res-table">
           <thead><tr>
-            <th onclick="sortTable('mes')"         data-col="mes">Mes</th>
-            <th onclick="sortTable('ingresos')"    data-col="ingresos" style="text-align:right;">Ingresos</th>
-            <th onclick="sortTable('otrosIng')"    data-col="otrosIng" style="text-align:right;">Otros Ing.</th>
-            <th onclick="sortTable('egresos')"     data-col="egresos" style="text-align:right;">Egresos</th>
-            <th onclick="sortTable('neto')"        data-col="neto" style="text-align:right;">Resultado Neto</th>
-            <th onclick="sortTable('margen')"      data-col="margen" style="text-align:right;">Margen %</th>
-            <th onclick="sortTable('vsAnterior')"  data-col="vsAnterior" style="text-align:right;">vs Mes Ant.</th>
-            <th onclick="sortTable('vsAnioAnt')"   data-col="vsAnioAnt" style="text-align:right;">vs Año Ant.</th>
+            <th onclick="sortTable('mes')"       data-col="mes">Mes</th>
+            <th onclick="sortTable('ingresos')"  data-col="ingresos" style="text-align:right;">Ingresos</th>
+            <th onclick="sortTable('otrosIng')"  data-col="otrosIng" style="text-align:right;">Otros Ing.</th>
+            <th onclick="sortTable('egresos')"   data-col="egresos" style="text-align:right;">Egresos</th>
+            <th onclick="sortTable('neto')"      data-col="neto" style="text-align:right;">Resultado Neto</th>
+            <th onclick="sortTable('ratio')"     data-col="ratio" style="text-align:right;">Ratio Egr/Ing</th>
+            <th onclick="sortTable('vsAnt')"     data-col="vsAnt" style="text-align:right;">vs Mes Ant.</th>
           </tr></thead>
           <tbody id="tableBody"></tbody>
         </table>
       </div>
     </div>`;
 
+  initFilters();
   applyFilters();
 }
 
 // ── FILTERS ───────────────────────────────────────
-function applyFilters() {
-  const anio = document.getElementById('fAnio')?.value || 'all';
-  const suc  = document.getElementById('fSuc')?.value  || 'all';
+function initFilters() {
+  const years = [...new Set([...cobRows, ...pagRows].map(r => r.Mes.slice(0,4)))].sort();
+  refreshSel('fAnio', years, v => v);
+  const sucs  = [...new Set([...cobRows, ...pagRows].map(r => r.Sucursal))].sort();
+  refreshSel('fSuc', sucs, v => SUC_NAMES[v]||v);
+}
 
-  const fCob   = cobRows.filter(r   => (anio==='all'||r.Mes.startsWith(anio)) && (suc==='all'||r.Sucursal===suc));
-  const fPag   = pagRows.filter(r   => (anio==='all'||r.Mes.startsWith(anio)) && (suc==='all'||r.Sucursal===suc));
-  const fOtros = otrosRows.filter(r => (anio==='all'||r.Mes.startsWith(anio)) && (suc==='all'||r.Sucursal===suc));
+function refreshSel(id, values, labelFn) {
+  const sel = document.getElementById(id); if (!sel) return;
+  const cur = sel.value;
+  const allLabel = id === 'fSuc' ? 'Todas' : 'Todos';
+  sel.innerHTML = `<option value="all">${allLabel}</option>`;
+  values.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v || '__empty__';
+    o.textContent = labelFn(v);
+    sel.appendChild(o);
+  });
+  if (cur !== 'all' && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+  else sel.value = 'all';
+}
 
+function applyFilters(changedFilter) {
+  let anio = document.getElementById('fAnio')?.value || 'all';
+  let suc  = document.getElementById('fSuc')?.value  || 'all';
+
+  // Cascade: Año → Sucursal
+  if (changedFilter === 'anio') {
+    document.getElementById('fSuc').value = 'all'; suc = 'all';
+  }
+
+  // Step 1: filter by Año
+  const r1cob   = cobRows.filter(r   => anio === 'all' || r.Mes.startsWith(anio));
+  const r1pag   = pagRows.filter(r   => anio === 'all' || r.Mes.startsWith(anio));
+  const r1otros = otrosRows.filter(r => anio === 'all' || r.Mes.startsWith(anio));
+
+  // Rebuild Sucursal from r1
+  const availSucs = [...new Set([...r1cob, ...r1pag].map(r => r.Sucursal))].sort();
+  refreshSel('fSuc', availSucs, v => SUC_NAMES[v]||v);
+  if (suc !== 'all' && !availSucs.includes(suc)) { document.getElementById('fSuc').value='all'; suc='all'; }
+
+  // Step 2: filter by Sucursal
+  const fCob   = r1cob.filter(r   => suc === 'all' || r.Sucursal === suc);
+  const fPag   = r1pag.filter(r   => suc === 'all' || r.Sucursal === suc);
+  const fOtros = r1otros.filter(r => suc === 'all' || r.Sucursal === suc);
+
+  // Period info
   const allMeses = [...new Set([...fCob.map(r=>r.Mes), ...fPag.map(r=>r.Mes)])].sort();
-  filtMeses = allMeses;
-
-  // Aggregate by month
-  const byMes = {};
-  allMeses.forEach(m => { byMes[m] = {ingresos:0, otrosIng:0, egresos:0}; });
-  fCob.forEach(r   => { if(byMes[r.Mes]) byMes[r.Mes].ingresos += r.Subtotal||0; });
-  fOtros.forEach(r => { if(byMes[r.Mes]) byMes[r.Mes].otrosIng += r.Monto||0; });
-  fPag.forEach(r   => { if(byMes[r.Mes]) byMes[r.Mes].egresos  += r.Monto||0; });
-
   document.getElementById('periodoInfo').textContent =
     allMeses.length + ' meses · ' + fCob.length.toLocaleString('es-AR') + ' cobros · ' + fPag.length.toLocaleString('es-AR') + ' pagos';
 
@@ -401,14 +428,25 @@ function applyFilters() {
     document.getElementById('rangeLabel').textContent = MSHORT[sm]+' '+sy+' → '+MSHORT[em]+' '+ey;
   }
 
-  updateKPIs(byMes, allMeses, fCob, fPag, fOtros);
-  updateChart(byMes, allMeses);
+  updateKPIs(byMes(fCob,fPag,fOtros), allMeses, fCob, fPag, fOtros);
+  updateChart(byMes(fCob,fPag,fOtros), allMeses);
   updateSucBreakdown(fCob, fPag, fOtros);
-  renderTable(byMes, allMeses);
+  renderTable(byMes(fCob,fPag,fOtros), allMeses);
+}
+
+function byMes(fCob, fPag, fOtros) {
+  const map = {};
+  [...new Set([...fCob.map(r=>r.Mes), ...fPag.map(r=>r.Mes)])].forEach(m => {
+    map[m] = {ingresos:0, otrosIng:0, egresos:0};
+  });
+  fCob.forEach(r   => { if(map[r.Mes]) map[r.Mes].ingresos += r.Subtotal||0; });
+  fOtros.forEach(r => { if(map[r.Mes]) map[r.Mes].otrosIng += r.Monto||0; });
+  fPag.forEach(r   => { if(map[r.Mes]) map[r.Mes].egresos  += r.Monto||0; });
+  return map;
 }
 
 function clearFilters() {
-  ['fAnio','fSuc'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});
+  ['fAnio','fSuc'].forEach(id => { const el=document.getElementById(id); if(el) el.value='all'; });
   applyFilters();
 }
 
@@ -422,40 +460,105 @@ function updateKPIs(byMes, meses, fCob, fPag, fOtros) {
   const margen     = totalIng2 > 0 ? (neto / totalIng2 * 100) : 0;
   const isPos      = neto >= 0;
 
+  // Meses en superávit vs déficit
+  const mesResults = meses.map(m => {
+    const d = byMes[m] || {ingresos:0,otrosIng:0,egresos:0};
+    return (d.ingresos + d.otrosIng) - d.egresos;
+  });
+  const mesesSuperavit = mesResults.filter(v => v >= 0).length;
+  const mesesDeficit   = mesResults.filter(v => v < 0).length;
+
+  // Mejor y peor mes por neto
+  const mejorMes = meses.reduce((a,b) => {
+    const na = (byMes[a]?.ingresos||0)+(byMes[a]?.otrosIng||0)-(byMes[a]?.egresos||0);
+    const nb = (byMes[b]?.ingresos||0)+(byMes[b]?.otrosIng||0)-(byMes[b]?.egresos||0);
+    return na > nb ? a : b;
+  }, meses[0]);
+  const peorMes = meses.reduce((a,b) => {
+    const na = (byMes[a]?.ingresos||0)+(byMes[a]?.otrosIng||0)-(byMes[a]?.egresos||0);
+    const nb = (byMes[b]?.ingresos||0)+(byMes[b]?.otrosIng||0)-(byMes[b]?.egresos||0);
+    return na < nb ? a : b;
+  }, meses[0]);
+
+  // Ratio promedio egresos/ingresos por mes (tendencia de salud)
+  const ratiosPorMes = meses.map(m => {
+    const d = byMes[m]||{ingresos:0,otrosIng:0,egresos:0};
+    const ing = d.ingresos + d.otrosIng;
+    return ing > 0 ? d.egresos / ing * 100 : 0;
+  });
+  const ratioPromedio = ratiosPorMes.length ? ratiosPorMes.reduce((s,v)=>s+v,0)/ratiosPorMes.length : 0;
+
+  // Semáforo de salud: margen + superávit streak + ratio
+  const saludScore = (margen >= 20 ? 2 : margen >= 0 ? 1 : 0)
+    + (mesesSuperavit >= meses.length * 0.8 ? 2 : mesesSuperavit >= meses.length * 0.5 ? 1 : 0)
+    + (ratioPromedio <= 80 ? 2 : ratioPromedio <= 100 ? 1 : 0);
+  const saludLabel = saludScore >= 5 ? '● Saludable' : saludScore >= 3 ? '● Atención' : '● Crítico';
+  const saludColor = saludScore >= 5 ? 'var(--green)' : saludScore >= 3 ? 'var(--accent)' : 'var(--red)';
+  const saludDot   = saludScore >= 5 ? 'dot-green' : saludScore >= 3 ? 'dot-amber' : 'dot-red';
+
+  const fmtMesLabel = m => { if(!m) return '—'; const [y,mn]=m.split('-').map(Number); return MSHORT[mn]+' '+y; };
+
   document.getElementById('kpiGrid').innerHTML = `
     <div class="kpi-card">
       <div class="kpi-top"><div class="kpi-title">Total Ingresos</div><div class="status-dot dot-green"></div></div>
       <div class="kpi-value privacy-amt" style="color:var(--green)">${fmt(totalIng2)}</div>
       <div class="kpi-bottom">
         <div class="kpi-status green">● Cobranzas + Otros</div>
-        <div class="kpi-sub">${totalOtros > 0 ? 'Otros: '+fmt(totalOtros) : 'Sin otros ing.'}</div>
+        <div class="kpi-sub">${meses.length} meses</div>
       </div>
     </div>
     <div class="kpi-card">
       <div class="kpi-top"><div class="kpi-title">Total Egresos</div><div class="status-dot dot-red"></div></div>
       <div class="kpi-value privacy-amt" style="color:var(--red)">${fmt(totalEgr)}</div>
-      <div class="kpi-bottom"><div class="kpi-status red">● Pagos netos</div><div class="kpi-sub">${meses.length} meses</div></div>
+      <div class="kpi-bottom">
+        <div class="kpi-status red">● Pagos netos</div>
+        <div class="kpi-sub">Ratio prom: ${ratioPromedio.toFixed(1)}%</div>
+      </div>
     </div>
     <div class="kpi-card">
       <div class="kpi-top"><div class="kpi-title">Resultado Neto</div><div class="status-dot ${isPos?'dot-green':'dot-red'}"></div></div>
       <div class="kpi-value privacy-amt" style="color:${isPos?'var(--green)':'var(--red)'}">${fmt(neto)}</div>
       <div class="kpi-bottom">
         <div class="kpi-status ${isPos?'green':'red'}">● ${isPos?'Superávit':'Déficit'}</div>
-        <div class="kpi-sub">Ing. - Egr.</div>
+        <div class="kpi-sub">Margen: ${margen.toFixed(1)}%</div>
       </div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-title">Margen</div><div class="status-dot dot-amber"></div></div>
-      <div class="kpi-value" style="color:${margen>=0?'var(--green)':'var(--red)'}">${margen.toFixed(1)}%</div>
+      <div class="kpi-top"><div class="kpi-title">Salud Financiera</div><div class="status-dot ${saludDot}"></div></div>
+      <div class="kpi-value" style="color:${saludColor};font-size:16px;padding-top:4px;">${saludScore>=5?'SALUDABLE':saludScore>=3?'ATENCIÓN':'CRÍTICO'}</div>
       <div class="kpi-bottom">
-        <div class="kpi-status amber">● Neto / Ingresos</div>
-        <div class="kpi-sub">del período completo</div>
+        <div class="kpi-status" style="color:${saludColor}">${saludLabel}</div>
+        <div class="kpi-sub">${mesesSuperavit}✓ ${mesesDeficit}✗ de ${meses.length} meses</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-title">Meses Superávit / Déficit</div><div class="status-dot ${mesesDeficit===0?'dot-green':mesesDeficit<=2?'dot-amber':'dot-red'}"></div></div>
+      <div class="kpi-value" style="font-size:20px;">
+        <span style="color:var(--green)">${mesesSuperavit}</span>
+        <span style="color:var(--muted);font-size:14px;"> / </span>
+        <span style="color:var(--red)">${mesesDeficit}</span>
+      </div>
+      <div class="kpi-bottom">
+        <div class="kpi-status ${mesesDeficit===0?'green':mesesDeficit<=2?'amber':'red'}">● ${mesesDeficit===0?'Sin déficit':mesesDeficit+' mes(es) en déficit'}</div>
+        <div class="kpi-sub">${meses.length} meses totales</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-title">Mejor / Peor Mes (Neto)</div><div class="status-dot dot-blue"></div></div>
+      <div class="kpi-value" style="font-size:13px;padding-top:4px;">
+        <div style="color:var(--green)">▲ ${fmtMesLabel(mejorMes)}</div>
+        <div style="color:var(--red);margin-top:4px;">▼ ${fmtMesLabel(peorMes)}</div>
+      </div>
+      <div class="kpi-bottom">
+        <div class="kpi-sub" style="color:var(--green)">${mejorMes?fmt((byMes[mejorMes]?.ingresos||0)+(byMes[mejorMes]?.otrosIng||0)-(byMes[mejorMes]?.egresos||0)):''}</div>
+        <div class="kpi-sub" style="color:var(--red)">${peorMes?fmt((byMes[peorMes]?.ingresos||0)+(byMes[peorMes]?.otrosIng||0)-(byMes[peorMes]?.egresos||0)):''}</div>
       </div>
     </div>`;
+
   if (privacyMode) document.querySelectorAll('.privacy-amt').forEach(el=>el.classList.add('privacy-mask'));
 }
 
-// ── CHART ─────────────────────────────────────────
+
 function updateChart(byMes, meses) {
   if (chartInst) { chartInst.destroy(); chartInst = null; }
   const ctx = document.getElementById('mainChart')?.getContext('2d'); if (!ctx) return;
@@ -550,20 +653,18 @@ function renderTable(byMes, meses) {
   }
   const lastMes = meses[meses.length-1];
   const rows = meses.map(mes => {
-    const d = byMes[mes];
-    const totalIng = d.ingresos + d.otrosIng;
-    const neto     = totalIng - d.egresos;
-    const margen   = totalIng > 0 ? neto/totalIng*100 : 0;
-    const [y,m]    = mes.split('-').map(Number);
-    const prevMes    = `${String(y).padStart(4,'0')}-${String(m===1?12:m-1).padStart(2,'0')}`;
-    const prevAnoMes = `${String(y-1).padStart(4,'0')}-${mes.slice(5)}`;
-    const pM  = byMes[prevMes];
-    const pA  = byMes[prevAnoMes];
-    const pMneto = pM ? (pM.ingresos+pM.otrosIng) - pM.egresos : null;
-    const pAneto = pA ? (pA.ingresos+pA.otrosIng) - pA.egresos : null;
-    const vsAnt  = pMneto !== null && pMneto !== 0 ? (neto-pMneto)/Math.abs(pMneto)*100 : null;
-    const vsAnio = pAneto !== null && pAneto !== 0 ? (neto-pAneto)/Math.abs(pAneto)*100 : null;
-    return { mes, ingresos:d.ingresos, otrosIng:d.otrosIng, egresos:d.egresos, neto, margen, vsAnterior:vsAnt, vsAnioAnt:vsAnio };
+    const d = byMes[mes] || {ingresos:0, otrosIng:0, egresos:0};
+    const ing  = d.ingresos + d.otrosIng;
+    const neto = ing - d.egresos;
+    const ratio = ing > 0 ? d.egresos / ing * 100 : 0;
+    // vs mes anterior
+    const [y,mn] = mes.split('-').map(Number);
+    const prevMes = `${String(y).padStart(4,'0')}-${String(mn===1?12:mn-1).padStart(2,'0')}`;
+    const dp = byMes[prevMes];
+    const ingP = dp ? dp.ingresos + dp.otrosIng : 0;
+    const netoP = dp ? ingP - dp.egresos : null;
+    const vsAnt = netoP !== null && netoP !== 0 ? (neto - netoP) / Math.abs(netoP) * 100 : null;
+    return { mes, ingresos:d.ingresos, otrosIng:d.otrosIng, egresos:d.egresos, neto, ratio, vsAnt };
   });
 
   rows.sort((a,b) => {
@@ -588,9 +689,8 @@ function renderTable(byMes, meses) {
       <td class="num privacy-amt" style="color:var(--blue)">${r.otrosIng > 0 ? fmt(r.otrosIng) : '—'}</td>
       <td class="egr privacy-amt">${fmt(r.egresos)}</td>
       <td class="net ${isPos?'pos':'neg'} privacy-amt">${fmt(r.neto)}</td>
-      <td class="num" style="color:${r.margen>=0?'var(--green)':'var(--red)'}">${r.margen.toFixed(1)}%</td>
-      ${deltaCell(r.vsAnterior)}
-      ${deltaCell(r.vsAnioAnt)}
+      <td class="num" style="color:${r.ratio>100?'var(--red)':r.ratio>80?'var(--accent)':'var(--green)'};font-family:'DM Mono',monospace;">${r.ratio.toFixed(1)}%</td>
+      ${deltaCell(r.vsAnt)}
     </tr>`;
   }).join('');
   if (privacyMode) document.querySelectorAll('.privacy-amt').forEach(el=>el.classList.add('privacy-mask'));
