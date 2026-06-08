@@ -42,16 +42,12 @@ module.exports = async function handler(req, res) {
 // ── Token verification ────────────────────────────────────────────────────────
 function verifyToken(token) {
   if (!token) return false;
-  const crypto  = require('crypto');
-  const PASS    = process.env.DASHBOARD_PASSWORD;
+  const crypto = require('crypto');
+  const PASS   = (process.env.DASHBOARD_PASSWORD || '').trim();
   if (!PASS) return false;
-  // Check current and previous 8h window (to avoid logout at window boundary)
-  const now = Math.floor(Date.now() / (1000 * 60 * 60 * 8));
-  for (const w of [now, now - 1]) {
-    const expected = crypto.createHmac('sha256', PASS).update(String(w)).digest('hex');
-    if (token === expected) return true;
-  }
-  return false;
+  // Token = SHA256 of password — static, no time window
+  const expected = crypto.createHash('sha256').update(PASS).digest('hex');
+  return token === expected;
 }
 
 // ── JWT Auth ──────────────────────────────────────────────────────────────────
