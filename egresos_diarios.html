@@ -227,7 +227,12 @@ function parseSheetRows(rows, type) {
 }
 
 async function loadData(sheets = ['cobranzas']) {
-  const resp = await fetch('/api/sheets');
+  const token = sessionStorage.getItem('dashToken');
+  if (!token) { window.location.href = 'login.html'; throw new Error('No autenticado'); }
+  const resp = await fetch('/api/sheets', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (resp.status === 401) { sessionStorage.removeItem('dashToken'); window.location.href = 'login.html'; throw new Error('Sesión expirada'); }
   if (!resp.ok) throw new Error('Error ' + resp.status);
   const raw = await resp.json();
   const result = {};
@@ -816,6 +821,7 @@ function renderDestRank(){
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  if (!sessionStorage.getItem('dashToken')) { window.location.href = 'login.html'; return; }
   // Set today label
   const _now = new Date();
   const _days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
@@ -850,6 +856,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (_overlay) _overlay.style.display = 'none';
   }
 });
+function logout() {
+  sessionStorage.removeItem('dashToken');
+  window.location.href = 'login.html';
+}
 </script>
 </body>
 </html>

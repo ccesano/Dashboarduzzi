@@ -189,6 +189,11 @@ function saveNewsData(n){ localStorage.setItem(NEWS_KEY,JSON.stringify(n)); }
 
 let editingIdx = -1;
 
+function logout() {
+  sessionStorage.removeItem('dashToken');
+  window.location.href = 'login.html';
+}
+
 // ── SHEETS SYNC ──────────────────────────────────────────────────────────────
 const EG_EXCL  = cfg.egresosExcluidos || [];
 const PATTERNS = cfg.patterns || ['Saldo de Caja'];
