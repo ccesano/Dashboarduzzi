@@ -167,7 +167,10 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 <div class="main">
   <div class="topbar">
     <div class="topbar-title">⚙ Configuración del Dashboard</div>
-    <button class="save-btn" onclick="saveConfig()">💾 Guardar todo</button>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="save-btn" onclick="saveConfig()">💾 Guardar todo</button>
+      <button onclick="logout()" style="padding:5px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;">↩ Salir</button>
+    </div>
   </div>
 
   <div class="content">

@@ -149,6 +149,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
       <span class="topbar-date" id="todayLabel">—</span>
       <span id="dataBadge" class="data-badge none">Sin datos</span>
       <button id="syncBtn" onclick="syncFromSheets()" style="padding:6px 14px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:7px;color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">🔄 Sincronizar</button>
+      <button onclick="logout()" style="padding:5px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;">↩ Salir</button>
     </div>
   </div>
 
@@ -202,6 +203,30 @@ function logout() {
   window.location.href = 'login.html';
 }
 
+
+function applyRemoteConfig(remoteConfig) {
+  if (!remoteConfig) return;
+  if (remoteConfig.egresosExcluidos) {
+    EG_EXCL = remoteConfig.egresosExcluidos.split(',').map(s=>s.trim()).filter(Boolean);
+  }
+  const newSucActive = {};
+  Object.keys(remoteConfig).forEach(k => {
+    if (k.startsWith('sucursalActiva_')) {
+      newSucActive[k.replace('sucursalActiva_','')] = remoteConfig[k] !== 'false';
+    }
+  });
+  if (Object.keys(newSucActive).length) SUC_ACT = newSucActive;
+  const newPlazos = {};
+  Object.keys(remoteConfig).forEach(k => {
+    if (k.startsWith('plazo_')) {
+      newPlazos[k.replace('plazo_','')] = parseInt(remoteConfig[k])||0;
+    }
+  });
+  if (Object.keys(newPlazos).length) {
+    try { localStorage.setItem('dashboardConfig', JSON.stringify({...cfg, condicionPlazos: newPlazos})); } catch(e) {}
+  }
+}
+
 // ── SHEETS SYNC ──────────────────────────────────────────────────────────────
 const EG_EXCL  = cfg.egresosExcluidos || [];
 const PATTERNS = cfg.patterns || ['Saldo de Caja'];
@@ -230,6 +255,8 @@ async function syncFromSheets() {
     const raw = await resp.json();
 
     // Parse the raw arrays from Sheets (same format as Excel rows)
+    // Apply remote config before parsing
+    if (raw.config) applyRemoteConfig(raw.config);
     const cobranzas     = parseSheetRows(raw.cobranzas,     'cobranzas');
     const pagos         = parseSheetRows(raw.pagos,         'pagos');
     const otrosIngresos = parseSheetRows(raw.otrosIngresos, 'otros');
