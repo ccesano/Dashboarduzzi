@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script>
+// Immediate auth check — runs before page renders
+(function() {
+  if (!sessionStorage.getItem('dashToken')) {
+    window.location.replace('login.html');
+  }
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Uzzi — Configuración</title>

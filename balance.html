@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script>
+// Immediate auth check — runs before page renders
+(function() {
+  if (!sessionStorage.getItem('dashToken')) {
+    window.location.replace('login.html');
+  }
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Uzzi College — Balance</title>
@@ -164,13 +172,13 @@ function parseSheetRows(rows, type) {
     } else if (type === 'otros') {
       const monto = parseMonto(r[5]);
       if (monto <= 0) continue;
+      const obs = String(r[4]||'').trim();
+      // Only include rows explicitly marked as verified income
+      if (!obs.includes('IngresoVerificado')) continue;
       const conc = String(r[3]||'').trim();
-      const excl = cfg.otrosExcluidos || [];
-      if (excl.includes(conc)) continue;
-      if (PATTERNS.some(p => conc.includes(p))) continue;
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:String(r[1]||'').trim(),
         Personal:String(r[2]||'').trim(), Concepto:conc,
-        Observaciones:String(r[4]||'').trim(), Monto:monto });
+        Observaciones:obs, Monto:monto });
     }
   }
   return result;
