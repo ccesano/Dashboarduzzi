@@ -333,7 +333,8 @@ async function loadData(sheets = ['cobranzas']) {
       <span class="topbar-date" id="todayLabel">—</span>
       <span id="fileLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
       <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()">👁 Modo privado</button>
-      </div>
+      <button onclick="logout()" style="padding:5px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;">↩ Salir</button>
+    </div>
   </div>
 
   <div class="content" id="contentArea">
@@ -341,8 +342,6 @@ async function loadData(sheets = ['cobranzas']) {
       <span class="big">📂</span>
       Cargá el archivo de exportación de Caja para ver los egresos<br>
       <span style="font-size:11px;color:var(--muted2);">El archivo debe tener la hoja "Pagos" — usá el botón arriba a la derecha</span>
-      <button onclick="logout()" style="padding:5px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;">↩ Salir</button>
-    </div>
   </div>
 
   <!-- BOTTOM ROW static -->
