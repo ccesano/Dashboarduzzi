@@ -116,6 +116,11 @@ td.proj-val{color:var(--accent)!important;opacity:.8;}
 /* Empty */
 .empty-state{text-align:center;padding:60px;color:var(--muted);}
 .empty-state .big{font-size:32px;display:block;margin-bottom:10px;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:var(--muted2);}
+* { scrollbar-width:thin; scrollbar-color:var(--border2) transparent; }
 </style>
 <script>
 // ── SHARED LOADER — reads data + config from Google Sheets ────────────────────
