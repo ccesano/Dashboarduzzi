@@ -66,7 +66,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 .tab-btn.t-egr{color:var(--red);}   .tab-btn.t-egr.active{background:rgba(239,68,68,.08);}
 .tab-btn.t-oi {color:var(--blue);}  .tab-btn.t-oi.active{background:rgba(59,130,246,.08);}
 /* CONTENT */
-.content{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.content{display:flex;flex-direction:column;}
 /* KPI row */
 .kpi-bar{display:flex;gap:10px;padding:12px 20px;flex-shrink:0;overflow-x:auto;}
 .kpi-mini{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:12px 16px;min-width:160px;flex-shrink:0;}
@@ -346,7 +346,7 @@ async function loadData(sheets = ['cobranzas']) {
     <button class="tab-btn t-ing" onclick="setTab('ingresos')">💰 Ingresos</button>
     <button class="tab-btn t-egr" onclick="setTab('egresos')">📤 Egresos</button>
     <button class="tab-btn t-oi"  onclick="setTab('otros')">➕ Otros Ingresos</button>
-    <button onclick="logout()" style="padding:5px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;" id="logoutBtn">↩ Salir</button>
+    
     </div>
 
   <!-- CONTENT -->
