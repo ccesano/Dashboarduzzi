@@ -998,28 +998,43 @@ function exportExcel() {
 // ═══════════════════════════════════════════════════════
 const ADJ_KEY = 'flujoAjustes';
 
+// In-memory cache for adjustments (loaded from Sheets)
+let _adjCache = null;
 function loadAdjustments() {
+  if (_adjCache !== null) return _adjCache;
   try { return JSON.parse(localStorage.getItem(ADJ_KEY)||'[]'); } catch(e){ return []; }
 }
-function saveAdjustments(adjs) {
-  localStorage.setItem(ADJ_KEY, JSON.stringify(adjs));
+function setAdjCache(adjs) {
+  _adjCache = adjs;
+  try { localStorage.setItem(ADJ_KEY, JSON.stringify(adjs)); } catch(e){}
 }
-function addAdjustment(type) {
+async function saveAdjustments(adjs) {
+  setAdjCache(adjs);
+  const token = sessionStorage.getItem('dashToken');
+  if (!token) return;
+  try {
+    await fetch('/api/save', {
+      method:'POST',
+      headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({key:'flujoAjustes', value:JSON.stringify(adjs)})
+    });
+  } catch(e){ console.error('Error saving adjustments:', e); }
+}
+async function addAdjustment(type) {
   const desc  = document.getElementById('adjDesc').value.trim();
-  const mesEl = document.getElementById('adjMes');
-  const mes   = mesEl?.value;
+  const mes   = document.getElementById('adjMes')?.value;
   const monto = parseFloat(document.getElementById('adjMonto').value)||0;
   if (!desc || !mes || !monto) { alert('Completá descripción, mes y monto.'); return; }
   const adjs = loadAdjustments();
-  adjs.push({ id: Date.now(), type, desc, mes, monto });
-  saveAdjustments(adjs);
-  document.getElementById('adjDesc').value = '';
+  adjs.push({ id:Date.now(), type, desc, mes, monto });
+  await saveAdjustments(adjs);
+  document.getElementById('adjDesc').value  = '';
   document.getElementById('adjMonto').value = '';
   buildDashboard();
 }
-function deleteAdjustment(id) {
+async function deleteAdjustment(id) {
   const adjs = loadAdjustments().filter(a => a.id !== id);
-  saveAdjustments(adjs);
+  await saveAdjustments(adjs);
   buildDashboard();
 }
 
@@ -1040,7 +1055,7 @@ function renderAdjPanel() {
     </div>
     ${adjs.length ? `<div style="font-size:11px;color:var(--muted);padding:6px 14px;">
       ${adjs.length} ajuste(s) cargado(s) — aparecen en las tablas y en el Saldo Neto.
-      <span onclick="if(confirm('¿Borrar todos los ajustes?')){localStorage.removeItem('${ADJ_KEY}');buildDashboard();}"
+      <span onclick="if(confirm('¿Borrar todos los ajustes?')){saveAdjustments([]).then(()=>buildDashboard());}"
         style="color:var(--red);cursor:pointer;margin-left:8px;">Borrar todos</span>
     </div>` : ''}`;
 }
@@ -1076,9 +1091,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const _data = await loadData(['cobranzas', 'pagos', 'otros']);
     
     
-    cobRows = _data.cobranzas;
-    pagRows = _data.pagos;
+    cobRows   = _data.cobranzas;
+    pagRows   = _data.pagos;
     otrosRows = _data.otrosIngresos || [];
+    // Load adjustments from Sheets Config
+    if (_data.config && _data.config.flujoAjustes) {
+      try {
+        const _ra = JSON.parse(_data.config.flujoAjustes);
+        if (typeof setAdjCache === 'function') setAdjCache(Array.isArray(_ra) ? _ra : []);
+      } catch(e) { console.warn('Could not parse flujoAjustes:', e); }
+    }
     const _fl = document.getElementById('fileLabel');
     const _mins = Math.round((Date.now() - _data.ts) / 60000);
     const _ago  = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
