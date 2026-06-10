@@ -306,6 +306,37 @@ function renderConfig() {
     </div>
   </div>
 
+  <!-- PADRÓN DE ALUMNOS -->
+  <div class="sec-card open" id="sec-padron">
+    <div class="sec-head" onclick="toggle('sec-padron')">
+      <div class="sec-head-left">
+        <div class="sec-icon purple">🎓</div>
+        <div>
+          <div class="sec-title">Padrón de Alumnos</div>
+          <div class="sec-sub">Cantidad real de alumnos por mes — usado en Ideal vs Real. Si un mes no tiene valor, toma el mes anterior.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="sec-badge ok" id="bdg-padron">Configurado</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+        Cargá el padrón real mes a mes. Dejá vacío si es igual al mes anterior.
+        El sistema deducirá el padrón del Excel para los meses que no configures.
+      </div>
+      <div id="padronList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="month" id="padronMesInput"
+          style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;outline:none;">
+        <input type="number" id="padronValInput" placeholder="Cantidad de alumnos" min="1"
+          style="width:180px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;outline:none;font-family:'DM Mono',monospace;">
+        <button class="btn-save-row" onclick="addPadron()">+ Agregar mes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- DATOS AVANZADOS (readonly) -->
   <div class="sec-card" id="sec-json">
     <div class="sec-head" onclick="toggle('sec-json')">
@@ -327,7 +358,8 @@ function renderConfig() {
       </div>`).join('')}
     </div>
   </div>`;
-}
+
+  setTimeout(renderPadron, 0);}
 
 // ── Tag input helpers ─────────────────────────────────────────────────────────
 function addTag(e, tagsId, inputId) {
@@ -396,6 +428,80 @@ function toggle(id){
 }
 function escHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── PADRÓN ───────────────────────────────────────────────────────────────────
+function renderPadron() {
+  const MNAMES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+    'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const padrones = {};
+  Object.keys(remoteConfig).forEach(k => {
+    if (k.startsWith('padron_')) {
+      padrones[k.replace('padron_','')] = remoteConfig[k];
+    }
+  });
+
+  const sorted = Object.keys(padrones).sort();
+  const list = document.getElementById('padronList');
+  if (!list) return;
+
+  if (!sorted.length) {
+    list.innerHTML = `<div style="color:var(--muted);font-size:12px;grid-column:1/-1;">
+      Sin padrón configurado — el sistema deduce del Excel.</div>`;
+    document.getElementById('bdg-padron').textContent = 'Sin configurar';
+    document.getElementById('bdg-padron').className = 'sec-badge warn';
+    return;
+  }
+
+  document.getElementById('bdg-padron').textContent = sorted.length + ' meses';
+  document.getElementById('bdg-padron').className = 'sec-badge ok';
+
+  list.innerHTML = sorted.map(mes => {
+    const [y,m] = mes.split('-').map(Number);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;
+      background:var(--surface2);border:1px solid var(--border2);border-radius:8px;">
+      <span style="font-size:12px;font-weight:600;flex:1;">${MNAMES[m]} ${y}</span>
+      <input type="number" value="${padrones[mes]}" min="1"
+        style="width:70px;padding:4px 7px;background:var(--bg);border:1px solid var(--border2);
+        border-radius:6px;color:var(--text);font-size:12px;font-family:'DM Mono',monospace;outline:none;text-align:center;"
+        onchange="updatePadron('${mes}', this.value, this)">
+      <span onclick="deletePadron('${mes}')"
+        style="color:var(--muted2);cursor:pointer;font-size:13px;padding:2px 4px;"
+        title="Eliminar">✕</span>
+    </div>`;
+  }).join('');
+}
+
+async function addPadron() {
+  const mes = document.getElementById('padronMesInput').value;
+  const val = document.getElementById('padronValInput').value;
+  if (!mes || !val || parseInt(val) <= 0) {
+    alert('Completá el mes y la cantidad de alumnos'); return;
+  }
+  await saveKey('padron_'+mes, val, null);
+  remoteConfig['padron_'+mes] = val;
+  document.getElementById('padronMesInput').value = '';
+  document.getElementById('padronValInput').value = '';
+  renderPadron();
+}
+
+async function updatePadron(mes, val, inputEl) {
+  if (!val || parseInt(val) <= 0) return;
+  await saveKey('padron_'+mes, val, null);
+  remoteConfig['padron_'+mes] = val;
+  // Visual feedback
+  if (inputEl) {
+    inputEl.style.borderColor = 'var(--green)';
+    setTimeout(() => { inputEl.style.borderColor = 'var(--border2)'; }, 1500);
+  }
+}
+
+async function deletePadron(mes) {
+  if (!confirm(`¿Eliminar padrón de ${mes}?`)) return;
+  // Save empty value to effectively remove
+  await saveKey('padron_'+mes, '', null);
+  delete remoteConfig['padron_'+mes];
+  renderPadron();
 }
 </script>
 </body>

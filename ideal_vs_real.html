@@ -318,13 +318,34 @@ const MNAMES    = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','
 const SUC_COLORS= {Alvarado:'#3b82f6',Caseros:'#a855f7',España:'#22c55e',Doris:'#f97316'};
 
 let cobRows=[];
+let remoteConfig={};
 let chartInst=null;
 let privacyMode=false;
 
-// Manual overrides stored in localStorage
-const IVR_KEY='ivrOverrides'; // { 'YYYY-MM': { alumnos: N, cuota: N } }
-function loadOverrides(){ try{return JSON.parse(localStorage.getItem(IVR_KEY)||'{}')}catch(e){return{};} }
-function saveOverrides(d){ localStorage.setItem(IVR_KEY,JSON.stringify(d)); }
+// Overrides — stored in Sheets Config (key='ivrOverrides'), cached in memory
+const IVR_KEY = 'ivrOverrides';
+let _ovrCache = null;
+
+function loadOverrides() {
+  if (_ovrCache !== null) return _ovrCache;
+  try { return JSON.parse(localStorage.getItem(IVR_KEY)||'{}'); } catch(e) { return {}; }
+}
+function setOvrCache(d) {
+  _ovrCache = d;
+  try { localStorage.setItem(IVR_KEY, JSON.stringify(d)); } catch(e) {}
+}
+async function saveOverrides(d) {
+  setOvrCache(d);
+  const token = sessionStorage.getItem('dashToken');
+  if (!token) return;
+  try {
+    await fetch('/api/save', {
+      method:'POST',
+      headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({key:'ivrOverrides', value:JSON.stringify(d)})
+    });
+  } catch(e) { console.error('Error saving overrides:', e); }
+}
 
 // ── SESSION LOAD ──────────────────────────────────
 // ── PRIVACY ───────────────────────────────────────
@@ -371,10 +392,37 @@ function parseDestino(destino, cobMes) {
 }
 
 // ── COMPUTE DATA ──────────────────────────────────
+function getPadronConfig() {
+  // Returns object { 'YYYY-MM': N } from remoteConfig keys starting with 'padron_'
+  const result = {};
+  if (typeof remoteConfig !== 'undefined' && remoteConfig) {
+    Object.keys(remoteConfig).forEach(k => {
+      if (k.startsWith('padron_')) {
+        const mes = k.replace('padron_', '');
+        const val = parseInt(remoteConfig[k]);
+        if (val > 0) result[mes] = val;
+      }
+    });
+  }
+  return result;
+}
+
+function getPadronForMes(mes, meses, padronConfig) {
+  // Direct config for this month
+  if (padronConfig[mes]) return { value: padronConfig[mes], source: 'config' };
+  // Fallback: walk backwards through previous months
+  const idx = meses.indexOf(mes);
+  for (let i = idx - 1; i >= 0; i--) {
+    if (padronConfig[meses[i]]) return { value: padronConfig[meses[i]], source: 'anterior' };
+  }
+  return null; // no config at all — use deduced
+}
+
 function computeData() {
   // All real months from cobranzas
   const meses = [...new Set(cobRows.map(r=>r.Mes))].sort();
   const overrides = loadOverrides();
+  const padronConfig = getPadronConfig();
 
   return meses.map(mes => {
     const rowsDelMes = cobRows.filter(r => r.Mes === mes);
@@ -385,9 +433,14 @@ function computeData() {
     const becados          = cuotasCorrientes.filter(r => (r.Subtotal||0) === 0);
     const pagados          = cuotasCorrientes.filter(r => (r.Subtotal||0) > 0);
 
-    // Padrón: alumnos únicos con cuota corriente (pagados + becados)
+    // Padrón: check Config first, then override, then deduced
     const padronDeducido = new Set(cuotasCorrientes.map(r=>r.Alumno)).size;
-    const padronReal     = parseInt(overrides[mes]?.alumnos) || padronDeducido;
+    const padronFromConfig = getPadronForMes(mes, meses, padronConfig);
+    const padronReal = parseInt(overrides[mes]?.alumnos) ||
+                      (padronFromConfig ? padronFromConfig.value : 0) ||
+                      padronDeducido;
+    const padronSource = overrides[mes]?.alumnos ? 'override' :
+                        padronFromConfig ? padronFromConfig.source : 'deducido';
 
     // Cuota promedio: promedio de cuotas corrientes pagadas
     const cuotaDeducida  = pagados.length > 0
@@ -424,7 +477,8 @@ function computeData() {
     });
 
     return {
-      mes, padronDeducido, padronReal, cuotaDeducida, cuotaReal,
+      mes, padronDeducido, padronReal, padronSource,
+      cuotaDeducida, cuotaReal,
       ingresoIdeal, ingresoRealCorriente, ingresoRealTotal,
       alumnosNoPagaron, becados: becados.length,
       cuotasAnteriores: cuotasAnteriores.length,
@@ -580,20 +634,15 @@ function renderTable(data) {
 }
 
 // ── SAVE OVERRIDE ─────────────────────────────────
-function saveOverride(mes, field, value) {
+async function saveOverride(mes, field, value) {
   const overrides = loadOverrides();
   if (!overrides[mes]) overrides[mes] = {};
   overrides[mes][field] = parseFloat(value)||0;
-  saveOverrides(overrides);
+  await saveOverrides(overrides);
   const data = computeData();
   renderTable(data);
   renderChart(data);
-  // Update KPIs
-  const totalIdeal  = data.reduce((s,d)=>s+d.ingresoIdeal,0);
-  const totalReal   = data.reduce((s,d)=>s+d.ingresoRealCorriente,0);
-  const totalBrecha = data.reduce((s,d)=>s+d.brecha,0);
-  const avgCobPct   = totalIdeal>0?(totalReal/totalIdeal*100):0;
-  // Re-render just KPI values silently
+  renderSucursal(data[data.length-1]);
 }
 
 // ── CHART ─────────────────────────────────────────
@@ -672,10 +721,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     const _data = await loadData(['cobranzas']);
     allRows = _data.cobranzas;
-    
-    
-    
-    
+    // Store remote config for padron lookup
+    if (_data.config) remoteConfig = _data.config;
+    // Load overrides from Sheets Config
+    if (_data.config && _data.config.ivrOverrides) {
+      try {
+        const _ro = JSON.parse(_data.config.ivrOverrides);
+        if (typeof setOvrCache === 'function') setOvrCache(typeof _ro === 'object' ? _ro : {});
+      } catch(e) {}
+    }
     const _fl = document.getElementById('fileLabel');
     const _mins = Math.round((Date.now() - _data.ts) / 60000);
     const _ago  = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
