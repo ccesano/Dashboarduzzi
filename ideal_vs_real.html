@@ -399,8 +399,11 @@ function computeData() {
       bySuc[s] = new Set(cuotaRows.filter(r => r.Sucursal===s).map(r=>r.Alumno)).size;
     });
 
+    // Flag months with no cuota corriente (Jan, Feb typically) — no warning needed
+    const hasCuotaCorriente = cuotaRows.length > 0;
+
     return { mes, padron, padronSource: padronCfg ? padronCfg.source : null,
-      alumnosCuota, alumnosInsc,
+      alumnosCuota, alumnosInsc, hasCuotaCorriente,
       sinPagar, pctCob, cuotasAnt: cuotasAnt.length, bySuc };
   });
 }
@@ -410,7 +413,9 @@ function buildDashboard() {
   const data = computeData();
   if (!data.length) return;
 
-  const conf      = data.filter(d => d.padron !== null);
+  // Only months with cuota corriente need padron configured
+  const mesesConCuota = data.filter(d => d.hasCuotaCorriente);
+  const conf      = mesesConCuota.filter(d => d.padron !== null);
   const hasPadron = conf.length > 0;
   const avgCob    = hasPadron ? conf.reduce((s,d)=>s+(d.pctCob||0),0)/conf.length : null;
   const totalSin  = data.reduce((s,d)=>s+(d.sinPagar||0), 0);
@@ -421,8 +426,8 @@ function buildDashboard() {
 
   const warnHtml = !hasPadron
     ? '<div class="cfg-warn">⚠️ <span>Padrón no configurado — sin esta información no se puede calcular la brecha de cobranza. <a href="config.html">→ Ir a Configuración</a></span></div>'
-    : conf.length < data.length
-    ? '<div style="padding:10px 16px;background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.2);border-radius:9px;color:var(--accent);font-size:12px;">⚠️ ' + (data.length-conf.length) + ' mes(es) sin padrón configurado. <a href="config.html" style="color:var(--accent);font-weight:600;">→ Configurar</a></div>'
+    : conf.length < mesesConCuota.length
+    ? '<div style="padding:10px 16px;background:rgba(232,197,71,.08);border:1px solid rgba(232,197,71,.2);border-radius:9px;color:var(--accent);font-size:12px;">⚠️ ' + (mesesConCuota.length-conf.length) + ' mes(es) con cuotas sin padrón configurado. <a href="config.html" style="color:var(--accent);font-weight:600;">→ Configurar</a></div>'
     : '';
 
   content.innerHTML = warnHtml + `
@@ -496,7 +501,9 @@ function buildDashboard() {
             const pc_color = pc===null?'var(--muted2)':pc>=90?'var(--green)':pc>=75?'var(--accent)':'var(--red)';
             const sp_color = d.sinPagar===null?'var(--muted2)':d.sinPagar===0?'var(--green)':d.sinPagar<=5?'var(--accent)':'var(--red)';
             const padronCell = d.padron === null
-              ? '<span style="color:var(--red);font-size:11px;">⚠️ <a href="config.html" style="color:var(--red);">configurar</a></span>'
+              ? (d.hasCuotaCorriente
+                  ? '<span style="color:var(--red);font-size:11px;">⚠️ <a href="config.html" style="color:var(--red);">configurar</a></span>'
+                  : '<span style="color:var(--muted2);font-size:11px;">—</span>')
               : d.padronSource==='anterior'
               ? '<span title="Tomado del mes anterior">' + d.padron + ' <span style="color:var(--muted);font-size:10px;">↑ant</span></span>'
               : String(d.padron);
