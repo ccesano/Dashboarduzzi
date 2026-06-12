@@ -293,6 +293,63 @@ function togglePrivacy(){
 }
 function logout(){ sessionStorage.removeItem('dashToken'); window.location.href='login.html'; }
 
+// ── CICLOS LECTIVOS ───────────────────────────────────────────────────────────
+function computeCiclos() {
+  // Find all unique ciclo years from Inscripción destinos
+  const inscRe = /^Inscripci[oó]n\s*[''`]?(\d{2,4})/i;
+  const ciclos = {};
+
+  cobRows.forEach(r => {
+    const m = r.Destino.match(inscRe);
+    if (!m) return;
+    let yr = parseInt(m[1]);
+    if (yr < 100) yr += 2000;
+    const ciclo = String(yr);
+    if (!ciclos[ciclo]) ciclos[ciclo] = { alumnos: {}, fechas: [] };
+    const alumno = r.Alumno;
+    if (!ciclos[ciclo].alumnos[alumno]) ciclos[ciclo].alumnos[alumno] = 0;
+    ciclos[ciclo].alumnos[alumno]++;
+    if (r.Dia) ciclos[ciclo].fechas.push(r.Dia);
+  });
+
+  return Object.entries(ciclos).sort((a,b) => b[0].localeCompare(a[0])).map(([ciclo, c]) => {
+    const counts = Object.values(c.alumnos);
+    const total = counts.length;
+    const una   = counts.filter(n => n===1).length;
+    const dos   = counts.filter(n => n===2).length;
+    const mas   = counts.filter(n => n>=3).length;
+    const fechas = c.fechas.sort();
+    const desde = fechas[0] || '';
+    const hasta = fechas[fechas.length-1] || '';
+    return { ciclo, total, una, dos, mas, desde, hasta };
+  });
+}
+
+function renderCiclos() {
+  const ciclos = computeCiclos();
+  const tbody = document.getElementById('ciclosBody');
+  if (!tbody) return;
+  if (!ciclos.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin inscripciones en el período</td></tr>';
+    return;
+  }
+  const fmtDate = d => {
+    if (!d) return '—';
+    const [y,m,day] = d.split('-');
+    return day+'/'+m+'/'+y;
+  };
+  tbody.innerHTML = ciclos.map(c => {
+    return '<tr>' +
+      '<td style="font-weight:700;">Ciclo ' + c.ciclo + '</td>' +
+      '<td class="num" style="color:var(--accent);font-weight:700;">' + c.total.toLocaleString('es-AR') + '</td>' +
+      '<td class="num" style="color:var(--muted);">' + c.una + '</td>' +
+      '<td class="num" style="color:var(--muted);">' + c.dos + '</td>' +
+      '<td class="num" style="color:var(--muted);">' + c.mas + '</td>' +
+      '<td class="num" style="color:var(--muted2);font-size:11px;">' + fmtDate(c.desde) + ' → ' + fmtDate(c.hasta) + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
 // ── PADRÓN FROM CONFIG ────────────────────────────────────────────────────────
 function getPadronForMes(mes, meses) {
   const key = 'padron_' + mes;
@@ -398,6 +455,29 @@ function buildDashboard() {
       <div style="height:190px;position:relative;"><canvas id="ivrChart"></canvas></div>
     </div>
 
+    <!-- CICLOS LECTIVOS -->
+    <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);">
+      Inscripciones por Ciclo Lectivo
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="tbl-wrap">
+        <table class="ivr-table" id="ciclosTable">
+          <thead><tr>
+            <th style="text-align:left;">Ciclo</th>
+            <th>Inscriptos únicos</th>
+            <th>1 cuota</th>
+            <th>2 cuotas</th>
+            <th>3+ cuotas</th>
+            <th>Período de cobro</th>
+          </tr></thead>
+          <tbody id="ciclosBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);">
+      Cobranza de Cuotas por Mes
+    </div>
     <div class="card" style="padding:0;overflow:hidden;">
       <div class="tbl-wrap">
         <table class="ivr-table">
@@ -410,7 +490,7 @@ function buildDashboard() {
             <th>Inscripciones</th>
             <th>Cuotas Ant.</th>
           </tr></thead>
-          <tbody>${data.map(d => {
+          <tbody>${[...data].reverse().map(d => {
             const [dy,dm] = d.mes.split('-').map(Number);
             const pc = d.pctCob;
             const pc_color = pc===null?'var(--muted2)':pc>=90?'var(--green)':pc>=75?'var(--accent)':'var(--red)';
@@ -449,6 +529,7 @@ function buildDashboard() {
       }).join('')}
     </div>`;
 
+  renderCiclos();
   renderChart(data);
   if(privacyMode) document.querySelectorAll('.pv').forEach(el=>el.classList.add('privacy-mask'));
 }
