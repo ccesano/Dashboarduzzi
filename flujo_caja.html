@@ -805,14 +805,32 @@ function renderResumen(sec) {
   });
   const pagNoRecur = pagDests.filter(d=>isNoRecurrente(d));
 
-  const sumDests = (dests, byDestMap, col) => dests.reduce((s,d)=>s+resolveVal(col, byDestMap[d]||{}, d), 0);
+  // Build a single aggregated-by-month series for each group (recurrentes vs no-recurrentes)
+  // and apply resolveVal/baseValForSeries ONCE on the aggregate — not once per destino.
+  // Averaging per-destino (and ignoring zero months) distorts the result when destinos
+  // like "Cuota Marzo" only have data in one month: their "3-month average" would just
+  // be that single value, inflating the total. Aggregating first avoids this.
+  function aggregateByMonth(dests, byDestMap) {
+    const out = {};
+    dests.forEach(d => {
+      const series = byDestMap[d] || {};
+      Object.keys(series).forEach(m => { out[m] = (out[m]||0) + series[m]; });
+    });
+    return out;
+  }
 
-  const getCobVal      = (col) => sumDests(cobRecur,   aggCobByDest,   col);
-  const getCobNoRecVal = (col) => sumDests(cobNoRecur, aggCobByDest,   col);
-  const getOIVal       = (col) => sumDests(otrosRecur,   aggOtrosByDest, col);
-  const getOINoRecVal  = (col) => sumDests(otrosNoRecur, aggOtrosByDest, col);
+  const cobRecurAgg    = aggregateByMonth(cobRecur,   aggCobByDest);
+  const cobNoRecurAgg  = aggregateByMonth(cobNoRecur, aggCobByDest);
+  const otrosRecurAgg  = aggregateByMonth(otrosRecur,   aggOtrosByDest);
+  const otrosNoRecurAgg= aggregateByMonth(otrosNoRecur, aggOtrosByDest);
+  const pagNoRecurAgg  = aggregateByMonth(pagNoRecur, aggPagByDest);
+
+  const getCobVal      = (col) => resolveVal(col, cobRecurAgg,     'Cobranzas');
+  const getCobNoRecVal = (col) => resolveVal(col, cobNoRecurAgg,   'Ingresos No Recurrentes');
+  const getOIVal       = (col) => resolveVal(col, otrosRecurAgg,   'Otros Ingresos');
+  const getOINoRecVal  = (col) => resolveVal(col, otrosNoRecurAgg, 'Otros Ingresos No Recurrentes');
   const getCatVal      = (cat,col) => resolveVal(col, aggCat[cat]||{}, cat);
-  const getPagNoRecVal = (col) => sumDests(pagNoRecur, aggPagByDest, col);
+  const getPagNoRecVal = (col) => resolveVal(col, pagNoRecurAgg, 'Egresos No Recurrentes');
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
