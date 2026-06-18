@@ -461,15 +461,24 @@ function buildDashboard() {
   const realMeses = histSel === 'all'
     ? allRealMeses
     : allRealMeses.slice(-parseInt(histSel));
-  const [ly,lm] = lastMes ? lastMes.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth()];
 
-  // Generate projection months
+  // Projection must start the month AFTER the current calendar month —
+  // not after lastMes (which is the last COMPLETE month, possibly earlier
+  // than curMes if there's a gap, or equal to curMes-1 normally).
+  // Using curMes as the anchor avoids duplicating the current month.
+  const [cy, cm] = curMes.split('-').map(Number);
+
+  // Generate projection months starting right after the current month
   projMeses = [];
   for (let i=1; i<=nProj; i++) {
-    let pm = lm+i, py = ly;
+    let pm = cm+i, py = cy;
     if (pm>12) { pm-=12; py++; }
     projMeses.push(`${String(py).padStart(4,'0')}-${String(pm).padStart(2,'0')}`);
   }
+
+  // realMeses already includes the current (partial) month as actual data —
+  // make sure projMeses never overlaps with it
+  projMeses = projMeses.filter(m => !realMeses.includes(m));
 
   allMeses = [...realMeses, ...projMeses];
 
