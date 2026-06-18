@@ -390,6 +390,8 @@ const MNAMES    = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','
 
 let cobRows = [], pagRows = [], otrosRows = [];
 let allMeses = [], projMeses = [], completeMeses = [];
+let remoteConfig = {};
+let curMes = '';
 let activeTab = 'resumen';
 let privacyMode = false;
 let chartInst = null;
@@ -452,8 +454,8 @@ function buildDashboard() {
   ])].sort();
 
   // Current calendar month — excluded from projection base (incomplete data)
-  const _today    = new Date();
-  const curMes    = _today.getFullYear() + '-' + String(_today.getMonth()+1).padStart(2,'0');
+  const _today = new Date();
+  curMes = _today.getFullYear() + '-' + String(_today.getMonth()+1).padStart(2,'0');
 
   // Months used as BASIS for projection — excludes current (incomplete) month
   completeMeses = allRealMeses.filter(m => m !== curMes);
@@ -621,27 +623,30 @@ function renderKPIs(realMeses) {
 function renderChart(realMeses) { /* called before DOM ready, skip */ }
 
 function renderChart2(realMeses) {
-  const aggCob = {}; cobRows.forEach(r=>{ aggCob[r.Mes]=(aggCob[r.Mes]||0)+r.Subtotal; });
-  const aggPag = {}; pagRows.forEach(r=>{ aggPag[r.Mes]=(aggPag[r.Mes]||0)+r.Monto; });
+  const cols = getColumns();
+  const aggByDestCob = {};
+  cobRows.forEach(r=>{ if(!aggByDestCob[r.Destino]) aggByDestCob[r.Destino]={}; aggByDestCob[r.Destino][r.Mes]=(aggByDestCob[r.Destino][r.Mes]||0)+r.Subtotal; });
+  const aggByDestPag = {};
+  pagRows.forEach(r=>{ if(!aggByDestPag[r.Destino]) aggByDestPag[r.Destino]={}; aggByDestPag[r.Destino][r.Mes]=(aggByDestPag[r.Destino][r.Mes]||0)+r.Monto; });
 
-  const ingData  = allMeses.map(m => projMeses.includes(m)
-    ? Object.values(window._projBase.avgCob).reduce((s,v)=>s+v,0)*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1)
-    : aggCob[m]||0);
-  const egrData  = allMeses.map(m => projMeses.includes(m)
-    ? Object.values(window._projBase.avgPag).reduce((s,v)=>s+v,0)*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1)
-    : aggPag[m]||0);
+  const cobDests = Object.keys(aggByDestCob);
+  const pagDests = Object.keys(aggByDestPag);
+
+  // Use the same per-destino resolveVal logic as the tables — respects no-recurrentes + dual current month
+  const ingData = cols.map(c => cobDests.reduce((s,d)=>s+resolveVal(c, aggByDestCob[d], d), 0));
+  const egrData = cols.map(c => pagDests.reduce((s,d)=>s+resolveVal(c, aggByDestPag[d], d), 0));
 
   const ctx = document.getElementById('flowChart')?.getContext('2d'); if (!ctx) return;
   if (chartInst) { chartInst.destroy(); chartInst=null; }
 
-  const isProj = allMeses.map(m=>projMeses.includes(m));
+  const isProj = cols.map(c=>c.isProj);
   chartInst = new Chart(ctx, {
     type:'bar',
     data:{
-      labels: allMeses.map(fmtMesShort),
+      labels: cols.map(c=>c.label),
       datasets:[
-        { label:'Ingresos',  data:ingData, backgroundColor: allMeses.map((_,i)=>isProj[i]?'rgba(34,197,94,0.3)':'rgba(34,197,94,0.75)'), borderRadius:3, borderWidth:0 },
-        { label:'Egresos',   data:egrData, backgroundColor: allMeses.map((_,i)=>isProj[i]?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.75)'), borderRadius:3, borderWidth:0 }
+        { label:'Ingresos',  data:ingData, backgroundColor: cols.map((_,i)=>isProj[i]?'rgba(34,197,94,0.3)':'rgba(34,197,94,0.75)'), borderRadius:3, borderWidth:0 },
+        { label:'Egresos',   data:egrData, backgroundColor: cols.map((_,i)=>isProj[i]?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.75)'), borderRadius:3, borderWidth:0 }
       ]
     },
     options:{
@@ -683,6 +688,62 @@ function baseValForSeries(aggByMes) {
   }
 }
 
+// ── COLUMNS (handles dual Real/Proyectado for current month) ─────────────────
+// Returns array of column descriptors: { mes, key, label, isProj, isActualSplit }
+// 'key' is what should be used to look up values (mes for normal, mes+'__proj' for the
+// projected half of the current month split column).
+function getColumns() {
+  return allMeses.map(m => {
+    if (m === curMes) {
+      return [
+        { mes: m, key: m,           label: fmtMesShort(m)+' (real)',  isProj: false, isCurrentReal: true },
+        { mes: m, key: m+'__proj',  label: fmtMesShort(m)+' (proy.)★',isProj: true,  isCurrentProj: true }
+      ];
+    }
+    return [{ mes: m, key: m, label: fmtMesShort(m)+(projMeses.includes(m)?'★':''), isProj: projMeses.includes(m) }];
+  }).flat();
+}
+
+// Is this concept marked as "no recurrente" in Config?
+function isNoRecurrente(concepto) {
+  const list = (remoteConfig.flujoNoRecurrentes || '').split(',').map(s=>s.trim()).filter(Boolean);
+  return list.some(nr => concepto && concepto.toLowerCase().includes(nr.toLowerCase()));
+}
+
+// Resolve the value for a given column key for a destino-based series.
+// aggByMes: { 'YYYY-MM': number }. Handles real/proj/current-split + no-recurrente rule.
+function resolveVal(col, aggByMes, concepto) {
+  const noRecur = isNoRecurrente(concepto);
+
+  if (col.isCurrentReal) {
+    // Always the real partial data for the current month — never projected
+    return aggByMes[col.mes] || 0;
+  }
+  if (col.isCurrentProj) {
+    // Projected close of the current month
+    if (noRecur) return 0; // no auto-projection for non-recurring concepts
+    const avg = baseValForSeries(aggByMes);
+    return avg * Math.pow(window._projBase.inflFactor, 1);
+  }
+  if (col.isProj) {
+    if (noRecur) return 0;
+    const avg = baseValForSeries(aggByMes);
+    return avg * Math.pow(window._projBase.inflFactor, projMeses.indexOf(col.mes)+1);
+  }
+  // Past/complete real month
+  return aggByMes[col.mes] || 0;
+}
+
+// Resolve manual adjustment value for a column. Adjustments apply to:
+//  - the current month's PROJECTED half (isCurrentProj)
+//  - future projected months (isProj, not current)
+// They do NOT apply to the current month's REAL half, nor to past complete months.
+function resolveAdjVal(col, adjs, type) {
+  if (col.isCurrentReal) return 0; // never on the real half
+  if (!col.isProj && !col.isCurrentProj) return 0; // never on completed real months
+  return adjs.filter(a => a.type===type && a.mes===col.mes).reduce((s,a)=>s+a.monto, 0);
+}
+
 // ═══════════════════════════════════════════════════════
 // RENDER CURRENT TAB
 // ═══════════════════════════════════════════════════════
@@ -697,9 +758,10 @@ function renderCurrentTab() {
 
 // ── Header row helper ────────────────────────────
 function makeHeaderRow() {
+  const cols = getColumns();
   return `<thead><tr>
     <th style="min-width:180px;">Concepto</th>
-    ${allMeses.map(m=>`<th class="${projMeses.includes(m)?'proj':''}" style="min-width:130px;">${fmtMesShort(m)}${projMeses.includes(m)?'★':''}</th>`).join('')}
+    ${cols.map(c=>`<th class="${c.isProj?'proj':''}" style="min-width:130px;${c.isCurrentReal?'border-right:1px dashed var(--border2);':''}">${c.label}</th>`).join('')}
   </tr></thead>`;
 }
 
@@ -714,6 +776,7 @@ function valCell(v, isProj, cls='') {
 // TAB: RESUMEN
 // ═══════════════════════════════════════════════════════
 function renderResumen(sec) {
+  const cols = getColumns();
   const aggCob={}, aggPag={}, aggOtros={};
   cobRows.forEach(r=>{ aggCob[r.Mes]=(aggCob[r.Mes]||0)+r.Subtotal; });
   pagRows.forEach(r=>{ aggPag[r.Mes]=(aggPag[r.Mes]||0)+r.Monto; });
@@ -727,41 +790,29 @@ function renderResumen(sec) {
     aggCat[cat][r.Mes]=(aggCat[cat][r.Mes]||0)+r.Monto;
   });
 
-  // Use the SAME method selected by the user (avg/last/trend) via shared helper
-  const catAvg = {};
-  CAT_ORDER.forEach(cat=>{ catAvg[cat] = baseValForSeries(aggCat[cat] || {}); });
-  const ingAvg = baseValForSeries(aggCob);
-  const oiAvg  = baseValForSeries(aggOtros);
-
-  const getCobVal = (m) => projMeses.includes(m)
-    ? ingAvg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1)
-    : aggCob[m]||0;
-  const getOIVal = (m) => projMeses.includes(m)
-    ? oiAvg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1)
-    : aggOtros[m]||0;
-  const getCatVal = (cat,m) => projMeses.includes(m)
-    ? (catAvg[cat]||0)*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1)
-    : (aggCat[cat]||{})[m]||0;
+  const getCobVal = (col) => resolveVal(col, aggCob, 'Cobranzas');
+  const getOIVal  = (col) => resolveVal(col, aggOtros, 'Otros Ingresos');
+  const getCatVal = (cat,col) => resolveVal(col, aggCat[cat]||{}, cat);
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
   // INGRESOS section
-  html += `<tr class="section-header"><td colspan="${allMeses.length+1}">INGRESOS</td></tr>`;
-  html += `<tr class="data-row"><td>Cobranzas</td>${allMeses.map(m=>valCell(getCobVal(m),projMeses.includes(m),'pos')).join('')}</tr>`;
-  html += `<tr class="data-row"><td>Otros Ingresos</td>${allMeses.map(m=>valCell(getOIVal(m),projMeses.includes(m),'pos')).join('')}</tr>`;
-  html += `<tr class="total-row"><td>TOTAL INGRESOS</td>${allMeses.map(m=>{
-    const v=getCobVal(m)+getOIVal(m);
-    return valCell(v,projMeses.includes(m),'pos');
+  html += `<tr class="section-header"><td colspan="${cols.length+1}">INGRESOS</td></tr>`;
+  html += `<tr class="data-row"><td>Cobranzas</td>${cols.map(c=>valCell(getCobVal(c),c.isProj,'pos')).join('')}</tr>`;
+  html += `<tr class="data-row"><td>Otros Ingresos</td>${cols.map(c=>valCell(getOIVal(c),c.isProj,'pos')).join('')}</tr>`;
+  html += `<tr class="total-row"><td>TOTAL INGRESOS</td>${cols.map(c=>{
+    const v=getCobVal(c)+getOIVal(c);
+    return valCell(v,c.isProj,'pos');
   }).join('')}</tr>`;
 
   // EGRESOS section
-  html += `<tr class="section-header"><td colspan="${allMeses.length+1}">EGRESOS OPERATIVOS</td></tr>`;
+  html += `<tr class="section-header"><td colspan="${cols.length+1}">EGRESOS OPERATIVOS</td></tr>`;
   CAT_ORDER.forEach(cat=>{
-    html += `<tr class="data-row"><td>${cat}</td>${allMeses.map(m=>valCell(getCatVal(cat,m),projMeses.includes(m),'egr')).join('')}</tr>`;
+    html += `<tr class="data-row"><td>${cat}</td>${cols.map(c=>valCell(getCatVal(cat,c),c.isProj,'egr')).join('')}</tr>`;
   });
-  html += `<tr class="total-row"><td>TOTAL EGRESOS</td>${allMeses.map(m=>{
-    const v=CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,m),0);
-    return valCell(v,projMeses.includes(m),'egr');
+  html += `<tr class="total-row"><td>TOTAL EGRESOS</td>${cols.map(c=>{
+    const v=CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,c),0);
+    return valCell(v,c.isProj,'egr');
   }).join('')}</tr>`;
 
   // MANUAL ADJUSTMENTS rows
@@ -770,37 +821,36 @@ function renderResumen(sec) {
   const adjGastos   = adjs.filter(a=>a.type==='gasto');
 
   if (adjIngresos.length) {
-    html += `<tr class="section-header"><td colspan="${allMeses.length+1}">✏️ INGRESOS VARIABLES</td></tr>`;
+    html += `<tr class="section-header"><td colspan="${cols.length+1}">✏️ INGRESOS VARIABLES</td></tr>`;
     adjIngresos.forEach(a=>{
       html += `<tr class="manual-row"><td>
         ${a.desc} <span class="del-btn" onclick="deleteAdjustment(${a.id})" title="Eliminar">✕</span>
-      </td>${allMeses.map(m=>{
-        const v = m===a.mes ? a.monto : 0;
-        return `<td class="pv${projMeses.includes(m)?' proj':''}" style="color:var(--green)">${v>0?fmt(v):'—'}</td>`;
+      </td>${cols.map(c=>{
+        const v = (c.isProj || c.isCurrentProj) && c.mes===a.mes ? a.monto : 0;
+        return `<td class="pv${c.isProj?' proj':''}" style="color:var(--green)">${v>0?fmt(v):'—'}</td>`;
       }).join('')}</tr>`;
     });
   }
   if (adjGastos.length) {
-    html += `<tr class="section-header"><td colspan="${allMeses.length+1}">✏️ GASTOS VARIABLES</td></tr>`;
+    html += `<tr class="section-header"><td colspan="${cols.length+1}">✏️ GASTOS VARIABLES</td></tr>`;
     adjGastos.forEach(a=>{
       html += `<tr class="manual-row"><td>
         ${a.desc} <span class="del-btn" onclick="deleteAdjustment(${a.id})" title="Eliminar">✕</span>
-      </td>${allMeses.map(m=>{
-        const v = m===a.mes ? a.monto : 0;
-        return `<td class="pv${projMeses.includes(m)?' proj':''}" style="color:var(--red)">${v>0?fmt(v):'—'}</td>`;
+      </td>${cols.map(c=>{
+        const v = (c.isProj || c.isCurrentProj) && c.mes===a.mes ? a.monto : 0;
+        return `<td class="pv${c.isProj?' proj':''}" style="color:var(--red)">${v>0?fmt(v):'—'}</td>`;
       }).join('')}</tr>`;
     });
   }
 
   // SALDO NETO row (including manual adjustments)
-  html += `<tr class="neto-row"><td>SALDO NETO</td>${allMeses.map(m=>{
-    const ing  = getCobVal(m)+getOIVal(m);
-    const egr  = CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,m),0);
-    const adjI = adjs.filter(a=>a.type==='ingreso'&&a.mes===m).reduce((s,a)=>s+a.monto,0);
-    const adjG = adjs.filter(a=>a.type==='gasto'  &&a.mes===m).reduce((s,a)=>s+a.monto,0);
+  html += `<tr class="neto-row"><td>SALDO NETO</td>${cols.map(c=>{
+    const ing  = getCobVal(c)+getOIVal(c);
+    const egr  = CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,c),0);
+    const adjI = resolveAdjVal(c, adjs, 'ingreso');
+    const adjG = resolveAdjVal(c, adjs, 'gasto');
     const neto = ing + adjI - egr - adjG;
-    const isProj=projMeses.includes(m);
-    const projClass=isProj?' proj proj-val':'';
+    const projClass=c.isProj?' proj proj-val':'';
     return `<td class="pv${projClass}" style="color:${neto>=0?'var(--green)':'var(--red)'};font-weight:700;">${fmt(neto)}</td>`;
   }).join('')}</tr>`;
 
@@ -812,6 +862,7 @@ function renderResumen(sec) {
 // TAB: INGRESOS (detail by Destino)
 // ═══════════════════════════════════════════════════════
 function renderIngresos(sec) {
+  const cols = getColumns();
   const aggByDestMes = {};
   cobRows.forEach(r=>{
     if (!aggByDestMes[r.Destino]) aggByDestMes[r.Destino]={};
@@ -819,8 +870,7 @@ function renderIngresos(sec) {
   });
 
   // Group destinos into sections
-  const currentYear = allMeses.filter(m=>!projMeses.includes(m)).pop()?.slice(0,4)||'2026';
-  const prevYear    = String(parseInt(currentYear)-1);
+  const currentYear = completeMeses[completeMeses.length-1]?.slice(0,4) || curMes.slice(0,4);
 
   const isCuotaCurr  = d => /^Cuota .+' ?\d*$/.test(d) && d.includes(currentYear.slice(-2));
   const isCuotaAnt   = d => /^Cuota .+' ?\d*$/.test(d) && !d.includes(currentYear.slice(-2));
@@ -830,39 +880,33 @@ function renderIngresos(sec) {
   const isSeguro     = d => /^Seguro/.test(d);
 
   const allDests = Object.keys(aggByDestMes).sort();
-  const cuotasCurr  = allDests.filter(isCuotaCurr);
-  const cuotasAnt   = allDests.filter(isCuotaAnt);
-  const inscripciones= allDests.filter(isInscripcion);
-  const ingles      = allDests.filter(isIngles);
-  const materiales  = allDests.filter(isMaterial);
-  const seguros     = allDests.filter(isSeguro);
-  const talleres    = allDests.filter(d=>!isCuotaCurr(d)&&!isCuotaAnt(d)&&!isInscripcion(d)&&!isIngles(d)&&!isMaterial(d)&&!isSeguro(d));
+  const recurDests   = allDests.filter(d => !isNoRecurrente(d));
+  const noRecurDests = allDests.filter(d => isNoRecurrente(d));
 
-  const renderSection = (label, dests) => {
+  const cuotasCurr    = recurDests.filter(isCuotaCurr);
+  const cuotasAnt     = recurDests.filter(isCuotaAnt);
+  const inscripciones = recurDests.filter(isInscripcion);
+  const ingles        = recurDests.filter(isIngles);
+  const materiales    = recurDests.filter(isMaterial);
+  const seguros       = recurDests.filter(isSeguro);
+  const talleres      = recurDests.filter(d=>!isCuotaCurr(d)&&!isCuotaAnt(d)&&!isInscripcion(d)&&!isIngles(d)&&!isMaterial(d)&&!isSeguro(d));
+
+  const valForCol = (d, col) => resolveVal(col, aggByDestMes[d] || {}, d);
+
+  const renderSection = (label, dests, opts) => {
     if (!dests.length) return '';
-    let html = `<tr class="section-header"><td colspan="${allMeses.length+1}">${label}</td></tr>`;
+    opts = opts || {};
+    let html = `<tr class="section-header"><td colspan="${cols.length+1}">${label}</td></tr>`;
     dests.forEach(d=>{
-      const avg = baseValForSeries(aggByDestMes[d] || {});
-      html += `<tr class="data-row"><td title="${d}">${d}</td>
-        ${allMeses.map(m=>{
-          const v = projMeses.includes(m)
-            ? avg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1)
-            : (aggByDestMes[d]||{})[m]||0;
-          return valCell(v,projMeses.includes(m),'pos');
-        }).join('')}
+      html += `<tr class="data-row"><td title="${d}">${d}${opts.tag?` <span style="font-size:9px;color:var(--muted2);">${opts.tag}</span>`:''}</td>
+        ${cols.map(c => valCell(valForCol(d,c), c.isProj, 'pos')).join('')}
       </tr>`;
     });
     // Subtotal
     html += `<tr class="total-row"><td>Subtotal ${label}</td>
-      ${allMeses.map(m=>{
-        const v = dests.reduce((s,d)=>{
-          if (projMeses.includes(m)) {
-            const avg2 = baseValForSeries(aggByDestMes[d] || {});
-            return s+avg2*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1);
-          }
-          return s+((aggByDestMes[d]||{})[m]||0);
-        },0);
-        return valCell(v,projMeses.includes(m),'pos');
+      ${cols.map(c => {
+        const v = dests.reduce((s,d)=>s+valForCol(d,c), 0);
+        return valCell(v, c.isProj, 'pos');
       }).join('')}
     </tr>`;
     return html;
@@ -877,17 +921,15 @@ function renderIngresos(sec) {
   html += renderSection('SEGUROS', seguros);
   html += renderSection('TALLERES Y OTROS', talleres);
 
-  // TOTAL INGRESOS
-  html += `<tr class="neto-row"><td>TOTAL INGRESOS</td>${allMeses.map(m=>{
-    const v = allDests.reduce((s,d)=>{
-      if (projMeses.includes(m)) {
-        const avg = baseValForSeries(aggByDestMes[d] || {});
-        return s+avg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1);
-      }
-      return s+((aggByDestMes[d]||{})[m]||0);
-    },0);
-    const isProj=projMeses.includes(m);
-    return `<td class="pv${isProj?' proj proj-val':''}" style="color:var(--green);font-weight:700;">${fmt(v)}</td>`;
+  // NO RECURRENTES — shown separately, NOT auto-projected
+  if (noRecurDests.length) {
+    html += renderSection('⚠️ NO RECURRENTES (sin proyección automática)', noRecurDests, {tag:'puntual'});
+  }
+
+  // TOTAL INGRESOS (includes everything, recurring + non-recurring + any manual adjustment for non-recurring months)
+  html += `<tr class="neto-row"><td>TOTAL INGRESOS</td>${cols.map(c=>{
+    const v = allDests.reduce((s,d)=>s+valForCol(d,c), 0);
+    return `<td class="pv${c.isProj?' proj proj-val':''}" style="color:var(--green);font-weight:700;">${fmt(v)}</td>`;
   }).join('')}</tr>`;
 
   html += `</tbody></table></div>`;
@@ -898,52 +940,65 @@ function renderIngresos(sec) {
 // TAB: EGRESOS (by category then by destino)
 // ═══════════════════════════════════════════════════════
 function renderEgresos(sec) {
+  const cols = getColumns();
   const aggByDestMes = {};
   pagRows.forEach(r=>{
     if (!aggByDestMes[r.Destino]) aggByDestMes[r.Destino]={};
     aggByDestMes[r.Destino][r.Mes]=(aggByDestMes[r.Destino][r.Mes]||0)+r.Monto;
   });
 
+  const allDests      = Object.keys(aggByDestMes);
+  const recurDests    = allDests.filter(d => !isNoRecurrente(d));
+  const noRecurDests  = allDests.filter(d => isNoRecurrente(d));
+
   const byCategory = {};
-  Object.keys(aggByDestMes).forEach(d=>{
+  recurDests.forEach(d=>{
     const cat = EG_CATS[d]||'Otros';
     if (!byCategory[cat]) byCategory[cat]=[];
     byCategory[cat].push(d);
   });
 
-  const getDestVal = (d,m) => {
-    if (projMeses.includes(m)) {
-      const avg = baseValForSeries(aggByDestMes[d] || {});
-      return avg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1);
-    }
-    return (aggByDestMes[d]||{})[m]||0;
-  };
+  const getDestVal = (d,col) => resolveVal(col, aggByDestMes[d] || {}, d);
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
   CAT_ORDER.forEach(cat=>{
     const dests = (byCategory[cat]||[]).sort();
     if (!dests.length) return;
-    html += `<tr class="section-header"><td colspan="${allMeses.length+1}">${cat.toUpperCase()}</td></tr>`;
+    html += `<tr class="section-header"><td colspan="${cols.length+1}">${cat.toUpperCase()}</td></tr>`;
     dests.forEach(d=>{
       html += `<tr class="data-row"><td title="${d}">${d.replace(' (UZZI)','')}</td>
-        ${allMeses.map(m=>valCell(getDestVal(d,m),projMeses.includes(m),'egr')).join('')}
+        ${cols.map(c=>valCell(getDestVal(d,c),c.isProj,'egr')).join('')}
       </tr>`;
     });
     html += `<tr class="total-row"><td>Subtotal ${cat}</td>
-      ${allMeses.map(m=>{
-        const v=dests.reduce((s,d)=>s+getDestVal(d,m),0);
-        return valCell(v,projMeses.includes(m),'egr');
+      ${cols.map(c=>{
+        const v=dests.reduce((s,d)=>s+getDestVal(d,c),0);
+        return valCell(v,c.isProj,'egr');
       }).join('')}
     </tr>`;
   });
 
+  // NO RECURRENTES — separate section, no auto-projection
+  if (noRecurDests.length) {
+    html += `<tr class="section-header"><td colspan="${cols.length+1}">⚠️ NO RECURRENTES (sin proyección automática)</td></tr>`;
+    noRecurDests.sort().forEach(d=>{
+      html += `<tr class="data-row"><td title="${d}">${d.replace(' (UZZI)','')} <span style="font-size:9px;color:var(--muted2);">puntual</span></td>
+        ${cols.map(c=>valCell(getDestVal(d,c),c.isProj,'egr')).join('')}
+      </tr>`;
+    });
+    html += `<tr class="total-row"><td>Subtotal No Recurrentes</td>
+      ${cols.map(c=>{
+        const v=noRecurDests.reduce((s,d)=>s+getDestVal(d,c),0);
+        return valCell(v,c.isProj,'egr');
+      }).join('')}
+    </tr>`;
+  }
+
   // Total
-  const allDests = Object.keys(aggByDestMes);
-  html += `<tr class="neto-row"><td>TOTAL EGRESOS</td>${allMeses.map(m=>{
-    const v=allDests.reduce((s,d)=>s+getDestVal(d,m),0);
-    const isProj=projMeses.includes(m);
-    return `<td class="pv${isProj?' proj proj-val':''}" style="color:var(--red);font-weight:700;">${fmt(v)}</td>`;
+  html += `<tr class="neto-row"><td>TOTAL EGRESOS</td>${cols.map(c=>{
+    const v=allDests.reduce((s,d)=>s+getDestVal(d,c),0);
+    return `<td class="pv${c.isProj?' proj proj-val':''}" style="color:var(--red);font-weight:700;">${fmt(v)}</td>`;
   }).join('')}</tr>`;
 
   html += `</tbody></table></div>`;
@@ -954,6 +1009,7 @@ function renderEgresos(sec) {
 // TAB: OTROS INGRESOS
 // ═══════════════════════════════════════════════════════
 function renderOtros(sec) {
+  const cols = getColumns();
   const aggByConc = {};
   otrosRows.forEach(r=>{
     const k = r.Concepto||r.Destino||'Sin concepto';
@@ -961,33 +1017,33 @@ function renderOtros(sec) {
     aggByConc[k][r.Mes]=(aggByConc[k][r.Mes]||0)+r.Monto;
   });
 
-  const keys = Object.keys(aggByConc).sort();
+  const allKeys     = Object.keys(aggByConc).sort();
+  const recurKeys   = allKeys.filter(k => !isNoRecurrente(k));
+  const noRecurKeys = allKeys.filter(k => isNoRecurrente(k));
+
+  const valForCol = (k,c) => resolveVal(c, aggByConc[k] || {}, k);
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
-  html += `<tr class="section-header"><td colspan="${allMeses.length+1}">OTROS INGRESOS</td></tr>`;
+  html += `<tr class="section-header"><td colspan="${cols.length+1}">OTROS INGRESOS</td></tr>`;
 
-  keys.forEach(k=>{
-    const avg = baseValForSeries(aggByConc[k] || {});
+  recurKeys.forEach(k=>{
     html += `<tr class="data-row"><td title="${k}">${k}</td>
-      ${allMeses.map(m=>{
-        const v=projMeses.includes(m)
-          ? avg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1)
-          : (aggByConc[k]||{})[m]||0;
-        return valCell(v,projMeses.includes(m),'pos');
-      }).join('')}
+      ${cols.map(c=>valCell(valForCol(k,c),c.isProj,'pos')).join('')}
     </tr>`;
   });
 
-  html += `<tr class="neto-row"><td>TOTAL OTROS INGRESOS</td>${allMeses.map(m=>{
-    const v=keys.reduce((s,k)=>{
-      if (projMeses.includes(m)){
-        const avg = baseValForSeries(aggByConc[k] || {});
-        return s+avg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1);
-      }
-      return s+((aggByConc[k]||{})[m]||0);
-    },0);
-    const isProj=projMeses.includes(m);
-    return `<td class="pv${isProj?' proj proj-val':''}" style="color:var(--blue);font-weight:700;">${fmt(v)}</td>`;
+  if (noRecurKeys.length) {
+    html += `<tr class="section-header"><td colspan="${cols.length+1}">⚠️ NO RECURRENTES (sin proyección automática)</td></tr>`;
+    noRecurKeys.forEach(k=>{
+      html += `<tr class="data-row"><td title="${k}">${k} <span style="font-size:9px;color:var(--muted2);">puntual</span></td>
+        ${cols.map(c=>valCell(valForCol(k,c),c.isProj,'pos')).join('')}
+      </tr>`;
+    });
+  }
+
+  html += `<tr class="neto-row"><td>TOTAL OTROS INGRESOS</td>${cols.map(c=>{
+    const v=allKeys.reduce((s,k)=>s+valForCol(k,c),0);
+    return `<td class="pv${c.isProj?' proj proj-val':''}" style="color:var(--blue);font-weight:700;">${fmt(v)}</td>`;
   }).join('')}</tr>`;
 
   html += `</tbody></table></div>`;
@@ -1007,7 +1063,7 @@ function exportExcel() {
     { name:'Otros Ingresos',tab:'otros'     }
   ];
 
-  const header = ['Concepto', ...allMeses.map(m=>fmtMesShort(m)+(projMeses.includes(m)?'★':''))];
+  const header = ['Concepto', ...getColumns().map(c=>c.label)];
 
   tabsToExport.forEach(({name, tab})=>{
     const prevTab = activeTab;
@@ -1096,7 +1152,7 @@ function renderAdjPanel() {
       <button class="btn-add-egr" onclick="addAdjustment('gasto')">+ Gasto variable</button>
     </div>
     ${adjs.length ? `<div style="font-size:11px;color:var(--muted);padding:6px 14px;">
-      ${adjs.length} ajuste(s) cargado(s) — aparecen en las tablas y en el Saldo Neto.
+      ${adjs.length} ajuste(s) cargado(s) — solo aplican sobre meses proyectados (no sobre meses ya completos con datos reales).
       <span onclick="if(confirm('¿Borrar todos los ajustes?')){saveAdjustments([]).then(()=>buildDashboard());}"
         style="color:var(--red);cursor:pointer;margin-left:8px;">Borrar todos</span>
     </div>` : ''}`;
@@ -1136,6 +1192,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     cobRows   = _data.cobranzas;
     pagRows   = _data.pagos;
     otrosRows = _data.otrosIngresos || [];
+    // Store remote config (needed for flujoNoRecurrentes lookup)
+    if (_data.config) remoteConfig = _data.config;
     // Load adjustments from Sheets Config
     if (_data.config && _data.config.flujoAjustes) {
       try {

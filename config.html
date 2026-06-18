@@ -195,6 +195,9 @@ function renderConfig() {
   // Parse egresos excluidos as array
   const egExcl = (c.egresosExcluidos||'').split(',').map(s=>s.trim()).filter(Boolean);
 
+  // Parse conceptos no recurrentes (flujo de caja)
+  const noRecur = (c.flujoNoRecurrentes||'').split(',').map(s=>s.trim()).filter(Boolean);
+
   // Parse sucursales activas
   const sucs = ['Alvarado','Caseros','España','Doris'];
   const sucColors = { Alvarado:'#3b82f6', Caseros:'#a855f7', España:'#22c55e', Doris:'#f97316' };
@@ -337,6 +340,37 @@ function renderConfig() {
     </div>
   </div>
 
+  <!-- FLUJO DE CAJA -->
+  <div class="sec-card open" id="sec-flujo">
+    <div class="sec-head" onclick="toggle('sec-flujo')">
+      <div class="sec-head-left">
+        <div class="sec-icon green">💸</div>
+        <div>
+          <div class="sec-title">Flujo de Caja</div>
+          <div class="sec-sub">Conceptos que no se proyectan automáticamente — solo se muestran con datos reales o ajustes manuales</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="sec-badge ok" id="bdg-norecur">${noRecur.length} concepto${noRecur.length!==1?'s':''}</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+        Marcá acá los conceptos de ingresos o egresos que son extraordinarios o puntuales (no recurrentes mes a mes).
+        En los meses futuros, estos conceptos NO se proyectarán automáticamente — solo aparecerán si cargás un ajuste manual
+        para ese mes específico en la pantalla de Flujo de Caja.
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-start;">
+        <div class="tags-wrap" id="norecurTags" onclick="document.getElementById('norecurInput').focus()">
+          ${noRecur.map(e=>`<span class="tag">${e}<span class="tag-del" onclick="removeTag('norecurTags','norecurInput','${e.replace(/'/g,"\\'")}')">✕</span></span>`).join('')}
+          <input class="tag-input" id="norecurInput" placeholder="Agregar concepto (ej: Materiales, Inversiones)..." onkeydown="addTag(event,'norecurTags','norecurInput')">
+        </div>
+        <button class="btn-save-row" id="btn-norecur" onclick="saveNoRecur()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- DATOS AVANZADOS (readonly) -->
   <div class="sec-card" id="sec-json">
     <div class="sec-head" onclick="toggle('sec-json')">
@@ -395,6 +429,16 @@ function saveEgExcl() {
   }
   const vals = getTagValues('egTags');
   saveKey('egresosExcluidos', vals.join(','), 'btn-eg');
+}
+
+function saveNoRecur() {
+  const inp = document.getElementById('norecurInput');
+  if (inp.value.trim()) {
+    const e = new KeyboardEvent('keydown',{key:'Enter',bubbles:true});
+    inp.dispatchEvent(e);
+  }
+  const vals = getTagValues('norecurTags');
+  saveKey('flujoNoRecurrentes', vals.join(','), 'btn-norecur');
 }
 
 function savePlazo(cond, inputId, btnId) {
