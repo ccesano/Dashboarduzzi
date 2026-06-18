@@ -331,6 +331,13 @@ async function loadData(sheets = ['cobranzas']) {
           <option value="last">Último mes</option>
           <option value="trend">Tendencia</option>
         </select>
+        <span class="infl-label" style="margin-left:8px;">Mostrar:</span>
+        <select class="proj-select" id="histSelect" onchange="buildDashboard()">
+          <option value="3">Últimos 3 meses</option>
+          <option value="6" selected>Últimos 6 meses</option>
+          <option value="12">Últimos 12 meses</option>
+          <option value="all">Todo el histórico</option>
+        </select>
         <span class="infl-label">Proyectar:</span>
         <select class="proj-select" id="projSelect">
           <option value="3">3 meses</option>
@@ -433,14 +440,27 @@ function buildDashboard() {
   const infl  = parseFloat(document.getElementById('inflInput').value)||0;
   const nProj = parseInt(document.getElementById('projSelect').value)||6;
 
-  // Real months from data
-  const realMeses = [...new Set([
+  // ALL real months from data (full history, used to compute complete projection base)
+  const allRealMeses = [...new Set([
     ...cobRows.map(r=>r.Mes),
     ...pagRows.map(r=>r.Mes)
   ])].sort();
 
-  // Last real month for projection base
-  const lastMes = realMeses[realMeses.length-1]||'';
+  // Current calendar month — excluded from projection base (incomplete data)
+  const _today    = new Date();
+  const curMes    = _today.getFullYear() + '-' + String(_today.getMonth()+1).padStart(2,'0');
+
+  // Months used as BASIS for projection — excludes current (incomplete) month
+  const completeMeses = allRealMeses.filter(m => m !== curMes);
+
+  // Last COMPLETE real month for projection base (not current month)
+  const lastMes = completeMeses[completeMeses.length-1] || allRealMeses[allRealMeses.length-1] || '';
+
+  // How many historical months to DISPLAY (table/chart) — independent of projection base
+  const histSel = document.getElementById('histSelect')?.value || '6';
+  const realMeses = histSel === 'all'
+    ? allRealMeses
+    : allRealMeses.slice(-parseInt(histSel));
   const [ly,lm] = lastMes ? lastMes.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth()];
 
   // Generate projection months
@@ -454,17 +474,18 @@ function buildDashboard() {
   allMeses = [...realMeses, ...projMeses];
 
   // Compute projected values using last 6 real months average × (1+infl%)^n
-  window._projBase = computeProjBase(realMeses, cobRows, pagRows, otrosRows, infl);
+  window._projBase = computeProjBase(completeMeses, cobRows, pagRows, otrosRows, infl);
 
   renderKPIs(realMeses);
   renderChart(realMeses);
   renderCurrentTab();
 }
 
-function computeProjBase(realMeses, cobRows, pagRows, otrosRows, infl) {
+function computeProjBase(completeMeses, cobRows, pagRows, otrosRows, infl) {
   const method = document.getElementById('methodSelect')?.value || 'avg';
-  const last6  = realMeses.slice(-6);
-  const lastM  = realMeses[realMeses.length-1];
+  // last6/lastM are based on COMPLETE months only — current month excluded
+  const last6  = completeMeses.slice(-6);
+  const lastM  = completeMeses[completeMeses.length-1];
 
   const aggCob={}, aggPag={}, aggOtros={};
   cobRows.forEach(r=>{ if(!aggCob[r.Mes]) aggCob[r.Mes]={}; aggCob[r.Mes][r.Destino]=(aggCob[r.Mes][r.Destino]||0)+r.Subtotal; });
