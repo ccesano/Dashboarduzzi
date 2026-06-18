@@ -326,7 +326,7 @@ async function loadData(sheets = ['cobranzas']) {
         <input class="infl-input" type="number" id="inflInput" value="3" min="0" max="100" step="0.5">
         <span class="infl-label">%</span>
         <span class="infl-label" style="margin-left:4px;">Base:</span>
-        <select class="proj-select" id="methodSelect">
+        <select class="proj-select" id="methodSelect" onchange="buildDashboard()">
           <option value="avg">Promedio</option>
           <option value="last">Último mes</option>
           <option value="trend">Tendencia</option>
@@ -384,7 +384,7 @@ const MSHORT    = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct
 const MNAMES    = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 let cobRows = [], pagRows = [], otrosRows = [];
-let allMeses = [], projMeses = [];
+let allMeses = [], projMeses = [], completeMeses = [];
 let activeTab = 'resumen';
 let privacyMode = false;
 let chartInst = null;
@@ -451,7 +451,7 @@ function buildDashboard() {
   const curMes    = _today.getFullYear() + '-' + String(_today.getMonth()+1).padStart(2,'0');
 
   // Months used as BASIS for projection — excludes current (incomplete) month
-  const completeMeses = allRealMeses.filter(m => m !== curMes);
+  completeMeses = allRealMeses.filter(m => m !== curMes);
 
   // Last COMPLETE real month for projection base (not current month)
   const lastMes = completeMeses[completeMeses.length-1] || allRealMeses[allRealMeses.length-1] || '';
@@ -657,6 +657,29 @@ function renderChart2(realMeses) {
   });
 }
 
+// Shared helper: compute projection base value for ANY series (by month map),
+// respecting the globally selected method (avg/last/trend)
+function baseValForSeries(aggByMes) {
+  const method = document.getElementById('methodSelect')?.value || 'avg';
+  const last6   = completeMeses.slice(-6);
+  const lastM   = completeMeses[completeMeses.length-1];
+  if (method === 'last') {
+    return aggByMes[lastM] || 0;
+  } else if (method === 'trend') {
+    const vals = last6.map(m => aggByMes[m] || 0).filter(v => v > 0);
+    if (vals.length < 2) return vals[0] || 0;
+    const n = vals.length;
+    const sumX = n*(n-1)/2, sumY = vals.reduce((s,v)=>s+v,0);
+    const sumXY = vals.reduce((s,v,i)=>s+i*v,0);
+    const sumX2 = vals.reduce((s,_,i)=>s+i*i,0);
+    const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+    return Math.max(0, vals[vals.length-1] + slope);
+  } else {
+    const vals = last6.map(m => aggByMes[m] || 0);
+    return vals.reduce((s,v)=>s+v,0) / Math.max(vals.filter(v=>v>0).length,1);
+  }
+}
+
 // ═══════════════════════════════════════════════════════
 // RENDER CURRENT TAB
 // ═══════════════════════════════════════════════════════
@@ -701,15 +724,11 @@ function renderResumen(sec) {
     aggCat[cat][r.Mes]=(aggCat[cat][r.Mes]||0)+r.Monto;
   });
 
-  // Category averages for projection
-  const last6 = allMeses.filter(m=>!projMeses.includes(m)).slice(-6);
+  // Use the SAME method selected by the user (avg/last/trend) via shared helper
   const catAvg = {};
-  CAT_ORDER.forEach(cat=>{
-    const vals = last6.map(m=>(aggCat[cat]||{})[m]||0);
-    catAvg[cat] = vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
-  });
-  const ingAvg = last6.map(m=>aggCob[m]||0).reduce((s,v)=>s+v,0)/Math.max(last6.length,1);
-  const oiAvg  = last6.map(m=>aggOtros[m]||0).reduce((s,v)=>s+v,0)/Math.max(last6.length,1);
+  CAT_ORDER.forEach(cat=>{ catAvg[cat] = baseValForSeries(aggCat[cat] || {}); });
+  const ingAvg = baseValForSeries(aggCob);
+  const oiAvg  = baseValForSeries(aggOtros);
 
   const getCobVal = (m) => projMeses.includes(m)
     ? ingAvg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1)
@@ -818,11 +837,9 @@ function renderIngresos(sec) {
 
   const renderSection = (label, dests) => {
     if (!dests.length) return '';
-    const last6 = allMeses.filter(m=>!projMeses.includes(m)).slice(-6);
     let html = `<tr class="section-header"><td colspan="${allMeses.length+1}">${label}</td></tr>`;
     dests.forEach(d=>{
-      const vals = last6.map(m=>(aggByDestMes[d]||{})[m]||0);
-      const avg  = vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
+      const avg = baseValForSeries(aggByDestMes[d] || {});
       html += `<tr class="data-row"><td title="${d}">${d}</td>
         ${allMeses.map(m=>{
           const v = projMeses.includes(m)
@@ -837,8 +854,7 @@ function renderIngresos(sec) {
       ${allMeses.map(m=>{
         const v = dests.reduce((s,d)=>{
           if (projMeses.includes(m)) {
-            const vals2=last6.map(mm=>(aggByDestMes[d]||{})[mm]||0);
-            const avg2=vals2.reduce((s,v)=>s+v,0)/Math.max(vals2.filter(v=>v>0).length,1);
+            const avg2 = baseValForSeries(aggByDestMes[d] || {});
             return s+avg2*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1);
           }
           return s+((aggByDestMes[d]||{})[m]||0);
@@ -859,12 +875,10 @@ function renderIngresos(sec) {
   html += renderSection('TALLERES Y OTROS', talleres);
 
   // TOTAL INGRESOS
-  const last6 = allMeses.filter(m=>!projMeses.includes(m)).slice(-6);
   html += `<tr class="neto-row"><td>TOTAL INGRESOS</td>${allMeses.map(m=>{
     const v = allDests.reduce((s,d)=>{
       if (projMeses.includes(m)) {
-        const vals=last6.map(mm=>(aggByDestMes[d]||{})[mm]||0);
-        const avg=vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
+        const avg = baseValForSeries(aggByDestMes[d] || {});
         return s+avg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1);
       }
       return s+((aggByDestMes[d]||{})[m]||0);
@@ -894,11 +908,9 @@ function renderEgresos(sec) {
     byCategory[cat].push(d);
   });
 
-  const last6 = allMeses.filter(m=>!projMeses.includes(m)).slice(-6);
   const getDestVal = (d,m) => {
     if (projMeses.includes(m)) {
-      const vals=last6.map(mm=>(aggByDestMes[d]||{})[mm]||0);
-      const avg=vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
+      const avg = baseValForSeries(aggByDestMes[d] || {});
       return avg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1);
     }
     return (aggByDestMes[d]||{})[m]||0;
@@ -946,15 +958,13 @@ function renderOtros(sec) {
     aggByConc[k][r.Mes]=(aggByConc[k][r.Mes]||0)+r.Monto;
   });
 
-  const last6 = allMeses.filter(m=>!projMeses.includes(m)).slice(-6);
   const keys = Object.keys(aggByConc).sort();
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
   html += `<tr class="section-header"><td colspan="${allMeses.length+1}">OTROS INGRESOS</td></tr>`;
 
   keys.forEach(k=>{
-    const vals=last6.map(m=>(aggByConc[k]||{})[m]||0);
-    const avg=vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
+    const avg = baseValForSeries(aggByConc[k] || {});
     html += `<tr class="data-row"><td title="${k}">${k}</td>
       ${allMeses.map(m=>{
         const v=projMeses.includes(m)
@@ -968,8 +978,7 @@ function renderOtros(sec) {
   html += `<tr class="neto-row"><td>TOTAL OTROS INGRESOS</td>${allMeses.map(m=>{
     const v=keys.reduce((s,k)=>{
       if (projMeses.includes(m)){
-        const vals=last6.map(mm=>(aggByConc[k]||{})[mm]||0);
-        const avg=vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
+        const avg = baseValForSeries(aggByConc[k] || {});
         return s+avg*Math.pow(window._projBase.inflFactor,projMeses.indexOf(m)+1);
       }
       return s+((aggByConc[k]||{})[m]||0);
