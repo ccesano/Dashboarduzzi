@@ -326,10 +326,15 @@ async function loadData(sheets = ['cobranzas']) {
         <input class="infl-input" type="number" id="inflInput" value="3" min="0" max="100" step="0.5">
         <span class="infl-label">%</span>
         <span class="infl-label" style="margin-left:4px;">Base:</span>
-        <select class="proj-select" id="methodSelect" onchange="buildDashboard()">
+        <select class="proj-select" id="methodSelect" onchange="onMethodChange()">
           <option value="avg">Promedio</option>
-          <option value="last">Último mes</option>
+          <option value="last">Último mes completo</option>
           <option value="trend">Tendencia</option>
+        </select>
+        <select class="proj-select" id="nMesesBaseSelect" onchange="buildDashboard()">
+          <option value="3">de 3 meses</option>
+          <option value="6" selected>de 6 meses</option>
+          <option value="12">de 12 meses</option>
         </select>
         <span class="infl-label" style="margin-left:8px;">Mostrar:</span>
         <select class="proj-select" id="histSelect" onchange="buildDashboard()">
@@ -490,41 +495,34 @@ function buildDashboard() {
   renderCurrentTab();
 }
 
-function computeProjBase(completeMeses, cobRows, pagRows, otrosRows, infl) {
+function computeProjBase(completeMesesArg, cobRows, pagRows, otrosRows, infl) {
+  // Delegates per-destino base calc to the single shared baseValForSeries()
+  // so every part of the page (chart, resumen, ingresos, egresos, otros) is
+  // guaranteed to use the exact same method + window size.
   const method = document.getElementById('methodSelect')?.value || 'avg';
-  // last6/lastM are based on COMPLETE months only — current month excluded
-  const last6  = completeMeses.slice(-6);
-  const lastM  = completeMeses[completeMeses.length-1];
 
   const aggCob={}, aggPag={}, aggOtros={};
   cobRows.forEach(r=>{ if(!aggCob[r.Mes]) aggCob[r.Mes]={}; aggCob[r.Mes][r.Destino]=(aggCob[r.Mes][r.Destino]||0)+r.Subtotal; });
   pagRows.forEach(r=>{ if(!aggPag[r.Mes]) aggPag[r.Mes]={}; aggPag[r.Mes][r.Destino]=(aggPag[r.Mes][r.Destino]||0)+r.Monto; });
   otrosRows.forEach(r=>{ if(!aggOtros[r.Mes]) aggOtros[r.Mes]={}; aggOtros[r.Mes][r.Concepto||r.Destino]=(aggOtros[r.Mes][r.Concepto||r.Destino]||0)+r.Monto; });
 
-  function baseVal(agg, dest, field) {
-    if (method === 'last') {
-      return (agg[lastM]||{})[dest]||0;
-    } else if (method === 'trend') {
-      const vals = last6.map(m=>(agg[m]||{})[dest]||0).filter(v=>v>0);
-      if (vals.length < 2) return vals[0]||0;
-      // Linear trend: slope × last index
-      const n = vals.length;
-      const sumX = n*(n-1)/2, sumY = vals.reduce((s,v)=>s+v,0);
-      const sumXY = vals.reduce((s,v,i)=>s+i*v,0);
-      const sumX2 = vals.reduce((s,_,i)=>s+i*i,0);
-      const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
-      return Math.max(0, vals[vals.length-1] + slope);
-    } else {
-      // avg
-      const vals = last6.map(m=>(agg[m]||{})[dest]||0);
-      return vals.reduce((s,v)=>s+v,0)/Math.max(vals.filter(v=>v>0).length,1);
-    }
+  // Re-shape aggCob[mes][destino] → aggByDest[destino][mes] for baseValForSeries
+  function byDest(agg, destinos) {
+    const out = {};
+    destinos.forEach(d => {
+      out[d] = {};
+      Object.keys(agg).forEach(m => { out[d][m] = (agg[m]||{})[d] || 0; });
+    });
+    return out;
   }
+  const cobByDest    = byDest(aggCob,   [...new Set(cobRows.map(r=>r.Destino))]);
+  const pagByDest    = byDest(aggPag,   [...new Set(pagRows.map(r=>r.Destino))]);
+  const otrosByDest  = byDest(aggOtros, [...new Set(otrosRows.map(r=>r.Concepto||r.Destino))]);
 
   const avgCob={}, avgPag={}, avgOtros={};
-  [...new Set(cobRows.map(r=>r.Destino))].forEach(d=>{ avgCob[d]=baseVal(aggCob,d); });
-  [...new Set(pagRows.map(r=>r.Destino))].forEach(d=>{ avgPag[d]=baseVal(aggPag,d); });
-  [...new Set(otrosRows.map(r=>r.Concepto||r.Destino))].forEach(d=>{ avgOtros[d]=baseVal(aggOtros,d); });
+  Object.keys(cobByDest).forEach(d=>{ avgCob[d]=baseValForSeries(cobByDest[d]); });
+  Object.keys(pagByDest).forEach(d=>{ avgPag[d]=baseValForSeries(pagByDest[d]); });
+  Object.keys(otrosByDest).forEach(d=>{ avgOtros[d]=baseValForSeries(otrosByDest[d]); });
 
   return { avgCob, avgPag, avgOtros, inflFactor: 1+(infl/100), method };
 }
@@ -661,12 +659,16 @@ function renderChart2(realMeses) {
 // respecting the globally selected method (avg/last/trend)
 function baseValForSeries(aggByMes) {
   const method = document.getElementById('methodSelect')?.value || 'avg';
-  const last6   = completeMeses.slice(-6);
-  const lastM   = completeMeses[completeMeses.length-1];
+  const nMeses  = parseInt(document.getElementById('nMesesBaseSelect')?.value) || 6;
+  // Window of N COMPLETE months, ending at the last complete month (current month excluded)
+  const windowMeses = completeMeses.slice(-nMeses);
+  const lastM = completeMeses[completeMeses.length-1];
+
   if (method === 'last') {
+    // "Último mes completo" — always the single most recent COMPLETE month
     return aggByMes[lastM] || 0;
   } else if (method === 'trend') {
-    const vals = last6.map(m => aggByMes[m] || 0).filter(v => v > 0);
+    const vals = windowMeses.map(m => aggByMes[m] || 0).filter(v => v > 0);
     if (vals.length < 2) return vals[0] || 0;
     const n = vals.length;
     const sumX = n*(n-1)/2, sumY = vals.reduce((s,v)=>s+v,0);
@@ -675,7 +677,8 @@ function baseValForSeries(aggByMes) {
     const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
     return Math.max(0, vals[vals.length-1] + slope);
   } else {
-    const vals = last6.map(m => aggByMes[m] || 0);
+    // avg — over the selected N-month window
+    const vals = windowMeses.map(m => aggByMes[m] || 0);
     return vals.reduce((s,v)=>s+v,0) / Math.max(vals.filter(v=>v>0).length,1);
   }
 }
@@ -1160,6 +1163,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 function logout() {
   sessionStorage.removeItem('dashToken');
   window.location.href = 'login.html';
+}
+
+function onMethodChange() {
+  const method = document.getElementById('methodSelect')?.value;
+  const sel = document.getElementById('nMesesBaseSelect');
+  if (sel) sel.style.display = (method === 'avg' || method === 'trend') ? '' : 'none';
+  buildDashboard();
 }
 </script>
 </body>
