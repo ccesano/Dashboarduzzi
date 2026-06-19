@@ -684,7 +684,9 @@ function baseValForSeries(aggByMes) {
   } else {
     // avg — over the selected N-month window
     const vals = windowMeses.map(m => aggByMes[m] || 0);
-    return vals.reduce((s,v)=>s+v,0) / Math.max(vals.filter(v=>v>0).length,1);
+    const result = vals.reduce((s,v)=>s+v,0) / Math.max(vals.filter(v=>v>0).length,1);
+    console.log('[DEBUG baseValForSeries]', {nMeses, windowMeses, vals, result});
+    return result;
   }
 }
 
@@ -820,6 +822,7 @@ function renderResumen(sec) {
   }
 
   const cobRecurAgg    = aggregateByMonth(cobRecur,   aggCobByDest);
+  console.log('[DEBUG cobRecurAgg]', {cobRecur, cobRecurAgg, cobNoRecurList: cobNoRecur});
   const cobNoRecurAgg  = aggregateByMonth(cobNoRecur, aggCobByDest);
   const otrosRecurAgg  = aggregateByMonth(otrosRecur,   aggOtrosByDest);
   const otrosNoRecurAgg= aggregateByMonth(otrosNoRecur, aggOtrosByDest);
