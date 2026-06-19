@@ -1175,7 +1175,7 @@ function migrateAdjustments(raw) {
     if (a.valores) { result.push(a); return; }
     const key = (a.type||'gasto') + '::' + (a.desc||'');
     if (!byKey[key]) {
-      byKey[key] = { id: a.id || Date.now()+Math.random(), type: a.type||'gasto', desc: a.desc||'', valores: {} };
+      byKey[key] = { id: String(a.id || (Date.now()+'_'+Math.random())), type: a.type||'gasto', desc: a.desc||'', valores: {} };
       result.push(byKey[key]);
     }
     if (a.mes && a.monto) byKey[key].valores[a.mes] = a.monto;
@@ -1203,22 +1203,23 @@ async function addAdjustmentConcept(type) {
   const desc = document.getElementById(inputId)?.value.trim();
   if (!desc) { alert('Escribí una descripción para el concepto.'); return; }
   const adjs = loadAdjustments();
-  adjs.push({ id: Date.now()+Math.random(), type, desc, valores: {} });
+  adjs.push({ id: String(Date.now()+'_'+Math.random()), type, desc, valores: {} });
   await saveAdjustments(adjs);
   document.getElementById(inputId).value = '';
   buildDashboard();
 }
 async function updateAdjustmentValue(id, mes, val) {
   const adjs = loadAdjustments();
-  const a = adjs.find(x => x.id === id);
+  const a = adjs.find(x => String(x.id) === String(id));
   if (!a) return;
+  if (!a.valores) a.valores = {};
   const n = parseFloat(val);
   if (!n || n <= 0) { delete a.valores[mes]; } else { a.valores[mes] = n; }
   await saveAdjustments(adjs);
   buildDashboard();
 }
 async function deleteAdjustmentConcept(id) {
-  const adjs = loadAdjustments().filter(a => a.id !== id);
+  const adjs = loadAdjustments().filter(a => String(a.id) !== String(id));
   await saveAdjustments(adjs);
   buildDashboard();
 }
