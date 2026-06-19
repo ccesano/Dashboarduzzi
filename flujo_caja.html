@@ -743,7 +743,8 @@ function resolveVal(col, aggByMes, concepto, forceNoRecur) {
 function resolveAdjVal(col, adjs, type) {
   if (col.isCurrentReal) return 0; // never on the real half
   if (!col.isProj && !col.isCurrentProj) return 0; // never on completed real months
-  return adjs.filter(a => a.type===type && a.mes===col.mes).reduce((s,a)=>s+a.monto, 0);
+  return adjs.filter(a => a.type===type)
+    .reduce((s,a) => s + (a.valores ? (a.valores[col.mes]||0) : (a.mes===col.mes ? a.monto : 0)), 0);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -859,33 +860,49 @@ function renderResumen(sec) {
     return valCell(v,c.isProj,'egr');
   }).join('')}</tr>`;
 
-  // MANUAL ADJUSTMENTS rows
+  // MANUAL ADJUSTMENTS rows — editable in-line per month, per concept
   const adjs = loadAdjustments();
   const adjIngresos = adjs.filter(a=>a.type==='ingreso');
   const adjGastos   = adjs.filter(a=>a.type==='gasto');
 
-  if (adjIngresos.length) {
-    html += `<tr class="section-header"><td colspan="${cols.length+1}">✏️ INGRESOS VARIABLES</td></tr>`;
-    adjIngresos.forEach(a=>{
-      html += `<tr class="manual-row"><td>
-        ${a.desc} <span class="del-btn" onclick="deleteAdjustment(${a.id})" title="Eliminar">✕</span>
-      </td>${cols.map(c=>{
-        const v = (c.isProj || c.isCurrentProj) && c.mes===a.mes ? a.monto : 0;
-        return `<td class="pv${c.isProj?' proj':''}" style="color:var(--green)">${v>0?fmt(v):'—'}</td>`;
-      }).join('')}</tr>`;
-    });
+  function renderAdjConceptRow(a, colorVar) {
+    return `<tr class="manual-row"><td>
+      ${a.desc} <span class="del-btn" onclick="deleteAdjustmentConcept('${a.id}')" title="Eliminar concepto entero">✕</span>
+    </td>${cols.map(c=>{
+      if (!c.isProj && !c.isCurrentProj) return `<td class="pv">—</td>`;
+      const v = a.valores[c.mes] || '';
+      return `<td class="pv proj" style="padding:4px 8px;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input type="number" value="${v}" placeholder="—"
+            style="width:90px;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:${colorVar};font-size:12px;font-family:'DM Mono',monospace;padding:3px 5px;text-align:right;"
+            onchange="updateAdjustmentValue('${a.id}','${c.mes}',this.value)">
+          ${v ? `<span onclick="updateAdjustmentValue('${a.id}','${c.mes}','0')" style="cursor:pointer;color:var(--muted2);font-size:11px;" title="Borrar este mes">✕</span>` : ''}
+        </div>
+      </td>`;
+    }).join('')}</tr>`;
   }
-  if (adjGastos.length) {
-    html += `<tr class="section-header"><td colspan="${cols.length+1}">✏️ GASTOS VARIABLES</td></tr>`;
-    adjGastos.forEach(a=>{
-      html += `<tr class="manual-row"><td>
-        ${a.desc} <span class="del-btn" onclick="deleteAdjustment(${a.id})" title="Eliminar">✕</span>
-      </td>${cols.map(c=>{
-        const v = (c.isProj || c.isCurrentProj) && c.mes===a.mes ? a.monto : 0;
-        return `<td class="pv${c.isProj?' proj':''}" style="color:var(--red)">${v>0?fmt(v):'—'}</td>`;
-      }).join('')}</tr>`;
-    });
-  }
+
+  html += `<tr class="section-header"><td colspan="${cols.length+1}">✏️ INGRESOS VARIABLES</td></tr>`;
+  adjIngresos.forEach(a=>{ html += renderAdjConceptRow(a, 'var(--green)'); });
+  html += `<tr><td colspan="${cols.length+1}" style="padding:8px 14px;">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="text" id="adjDescIngreso" placeholder="Nuevo concepto de ingreso (ej: Venta de equipo)..."
+        style="flex:1;max-width:320px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;outline:none;"
+        onkeydown="if(event.key==='Enter')addAdjustmentConcept('ingreso')">
+      <button onclick="addAdjustmentConcept('ingreso')" style="padding:6px 14px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">+ Agregar concepto</button>
+    </div>
+  </td></tr>`;
+
+  html += `<tr class="section-header"><td colspan="${cols.length+1}">✏️ GASTOS VARIABLES</td></tr>`;
+  adjGastos.forEach(a=>{ html += renderAdjConceptRow(a, 'var(--red)'); });
+  html += `<tr><td colspan="${cols.length+1}" style="padding:8px 14px;">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="text" id="adjDescGasto" placeholder="Nuevo concepto de gasto (ej: Inversión techado)..."
+        style="flex:1;max-width:320px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;outline:none;"
+        onkeydown="if(event.key==='Enter')addAdjustmentConcept('gasto')">
+      <button onclick="addAdjustmentConcept('gasto')" style="padding:6px 14px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:7px;color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">+ Agregar concepto</button>
+    </div>
+  </td></tr>`;
 
   // SALDO NETO row (including manual adjustments)
   html += `<tr class="neto-row"><td>SALDO NETO</td>${cols.map(c=>{
@@ -1142,9 +1159,27 @@ const ADJ_KEY = 'flujoAjustes';
 
 // In-memory cache for adjustments (loaded from Sheets)
 let _adjCache = null;
+// Adjustment shape (NEW): { id, type:'ingreso'|'gasto', desc, valores:{ 'YYYY-MM': monto } }
+// Migrates OLD shape { id, type, desc, mes, monto } automatically on load.
 function loadAdjustments() {
   if (_adjCache !== null) return _adjCache;
-  try { return JSON.parse(localStorage.getItem(ADJ_KEY)||'[]'); } catch(e){ return []; }
+  let raw = [];
+  try { raw = JSON.parse(localStorage.getItem(ADJ_KEY)||'[]'); } catch(e){ raw = []; }
+  return migrateAdjustments(raw);
+}
+function migrateAdjustments(raw) {
+  const byKey = {};
+  const result = [];
+  (raw||[]).forEach(a => {
+    if (a.valores) { result.push(a); return; }
+    const key = (a.type||'gasto') + '::' + (a.desc||'');
+    if (!byKey[key]) {
+      byKey[key] = { id: a.id || Date.now()+Math.random(), type: a.type||'gasto', desc: a.desc||'', valores: {} };
+      result.push(byKey[key]);
+    }
+    if (a.mes && a.monto) byKey[key].valores[a.mes] = a.monto;
+  });
+  return result;
 }
 function setAdjCache(adjs) {
   _adjCache = adjs;
@@ -1162,19 +1197,26 @@ async function saveAdjustments(adjs) {
     });
   } catch(e){ console.error('Error saving adjustments:', e); }
 }
-async function addAdjustment(type) {
-  const desc  = document.getElementById('adjDesc').value.trim();
-  const mes   = document.getElementById('adjMes')?.value;
-  const monto = parseFloat(document.getElementById('adjMonto').value)||0;
-  if (!desc || !mes || !monto) { alert('Completá descripción, mes y monto.'); return; }
+async function addAdjustmentConcept(type) {
+  const inputId = type === 'ingreso' ? 'adjDescIngreso' : 'adjDescGasto';
+  const desc = document.getElementById(inputId)?.value.trim();
+  if (!desc) { alert('Escribí una descripción para el concepto.'); return; }
   const adjs = loadAdjustments();
-  adjs.push({ id:Date.now(), type, desc, mes, monto });
+  adjs.push({ id: Date.now()+Math.random(), type, desc, valores: {} });
   await saveAdjustments(adjs);
-  document.getElementById('adjDesc').value  = '';
-  document.getElementById('adjMonto').value = '';
+  document.getElementById(inputId).value = '';
   buildDashboard();
 }
-async function deleteAdjustment(id) {
+async function updateAdjustmentValue(id, mes, val) {
+  const adjs = loadAdjustments();
+  const a = adjs.find(x => x.id === id);
+  if (!a) return;
+  const n = parseFloat(val);
+  if (!n || n <= 0) { delete a.valores[mes]; } else { a.valores[mes] = n; }
+  await saveAdjustments(adjs);
+  buildDashboard();
+}
+async function deleteAdjustmentConcept(id) {
   const adjs = loadAdjustments().filter(a => a.id !== id);
   await saveAdjustments(adjs);
   buildDashboard();
@@ -1182,24 +1224,12 @@ async function deleteAdjustment(id) {
 
 function renderAdjPanel() {
   const adjs = loadAdjustments();
-  const monthOpts = allMeses.map(m =>
-    `<option value="${m}">${fmtMesShort(m)}${projMeses.includes(m)?'★':''}</option>`
-  ).join('');
-
-  return `
-    <div class="adj-bar">
-      <span class="adj-label">➕ Agregar ajuste:</span>
-      <input  class="adj-input wide" id="adjDesc"  placeholder="Descripción (ej: Inversión techado)">
-      <select class="adj-select"     id="adjMes">${monthOpts}</select>
-      <input  class="adj-input adj-num" id="adjMonto" type="number" placeholder="Monto $" min="0">
-      <button class="btn-add-ing" onclick="addAdjustment('ingreso')">+ Ingreso variable</button>
-      <button class="btn-add-egr" onclick="addAdjustment('gasto')">+ Gasto variable</button>
-    </div>
-    ${adjs.length ? `<div style="font-size:11px;color:var(--muted);padding:6px 14px;">
-      ${adjs.length} ajuste(s) cargado(s) — solo aplican sobre meses proyectados (no sobre meses ya completos con datos reales).
-      <span onclick="if(confirm('¿Borrar todos los ajustes?')){saveAdjustments([]).then(()=>buildDashboard());}"
-        style="color:var(--red);cursor:pointer;margin-left:8px;">Borrar todos</span>
-    </div>` : ''}`;
+  if (!adjs.length) return '';
+  return `<div style="font-size:11px;color:var(--muted);padding:6px 14px;">
+    ✏️ ${adjs.length} concepto(s) de ajuste manual cargado(s) en la tabla Resumen — editá cada celda directamente ahí.
+    <span onclick="if(confirm('¿Borrar todos los ajustes?')){saveAdjustments([]).then(()=>buildDashboard());}"
+      style="color:var(--red);cursor:pointer;margin-left:8px;">Borrar todos</span>
+  </div>`;
 }
 
 // ═══════════════════════════════════════════════════════
