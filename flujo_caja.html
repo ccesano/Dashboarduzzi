@@ -684,9 +684,7 @@ function baseValForSeries(aggByMes) {
   } else {
     // avg — over the selected N-month window
     const vals = windowMeses.map(m => aggByMes[m] || 0);
-    const result = vals.reduce((s,v)=>s+v,0) / Math.max(vals.filter(v=>v>0).length,1);
-    console.log('[DEBUG baseValForSeries]', {nMeses, windowMeses, vals, result});
-    return result;
+    return vals.reduce((s,v)=>s+v,0) / Math.max(vals.filter(v=>v>0).length,1);
   }
 }
 
@@ -714,8 +712,8 @@ function isNoRecurrente(concepto) {
 
 // Resolve the value for a given column key for a destino-based series.
 // aggByMes: { 'YYYY-MM': number }. Handles real/proj/current-split + no-recurrente rule.
-function resolveVal(col, aggByMes, concepto) {
-  const noRecur = isNoRecurrente(concepto);
+function resolveVal(col, aggByMes, concepto, forceNoRecur) {
+  const noRecur = forceNoRecur || isNoRecurrente(concepto);
 
   if (col.isCurrentReal) {
     // Always the real partial data for the current month — never projected
@@ -822,18 +820,17 @@ function renderResumen(sec) {
   }
 
   const cobRecurAgg    = aggregateByMonth(cobRecur,   aggCobByDest);
-  console.log('[DEBUG cobRecurAgg]', {cobRecur, cobRecurAgg, cobNoRecurList: cobNoRecur});
   const cobNoRecurAgg  = aggregateByMonth(cobNoRecur, aggCobByDest);
   const otrosRecurAgg  = aggregateByMonth(otrosRecur,   aggOtrosByDest);
   const otrosNoRecurAgg= aggregateByMonth(otrosNoRecur, aggOtrosByDest);
   const pagNoRecurAgg  = aggregateByMonth(pagNoRecur, aggPagByDest);
 
   const getCobVal      = (col) => resolveVal(col, cobRecurAgg,     'Cobranzas');
-  const getCobNoRecVal = (col) => resolveVal(col, cobNoRecurAgg,   'Ingresos No Recurrentes');
+  const getCobNoRecVal = (col) => resolveVal(col, cobNoRecurAgg,   'Ingresos No Recurrentes', true);
   const getOIVal       = (col) => resolveVal(col, otrosRecurAgg,   'Otros Ingresos');
-  const getOINoRecVal  = (col) => resolveVal(col, otrosNoRecurAgg, 'Otros Ingresos No Recurrentes');
+  const getOINoRecVal  = (col) => resolveVal(col, otrosNoRecurAgg, 'Otros Ingresos No Recurrentes', true);
   const getCatVal      = (cat,col) => resolveVal(col, aggCat[cat]||{}, cat);
-  const getPagNoRecVal = (col) => resolveVal(col, pagNoRecurAgg, 'Egresos No Recurrentes');
+  const getPagNoRecVal = (col) => resolveVal(col, pagNoRecurAgg, 'Egresos No Recurrentes', true);
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
