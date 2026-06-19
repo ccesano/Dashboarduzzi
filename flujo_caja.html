@@ -752,10 +752,15 @@ function resolveAdjVal(col, adjs, type) {
 // ═══════════════════════════════════════════════════════
 function renderCurrentTab() {
   const sec = document.getElementById('tableSection'); if (!sec) return;
-  if (activeTab==='resumen')   renderResumen(sec);
-  else if (activeTab==='ingresos') renderIngresos(sec);
-  else if (activeTab==='egresos')  renderEgresos(sec);
-  else if (activeTab==='otros')    renderOtros(sec);
+  try {
+    if (activeTab==='resumen')   renderResumen(sec);
+    else if (activeTab==='ingresos') renderIngresos(sec);
+    else if (activeTab==='egresos')  renderEgresos(sec);
+    else if (activeTab==='otros')    renderOtros(sec);
+  } catch(err) {
+    console.error('Error rendering tab', activeTab, err);
+    sec.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px;">Error: '+err.message+'<br><pre style="font-size:10px;white-space:pre-wrap;">'+err.stack+'</pre></div>';
+  }
   if (privacyMode) document.querySelectorAll('.pv').forEach(el=>el.classList.add('privacy-mask'));
 }
 
