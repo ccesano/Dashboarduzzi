@@ -752,15 +752,10 @@ function resolveAdjVal(col, adjs, type) {
 // ═══════════════════════════════════════════════════════
 function renderCurrentTab() {
   const sec = document.getElementById('tableSection'); if (!sec) return;
-  try {
-    if (activeTab==='resumen')   renderResumen(sec);
-    else if (activeTab==='ingresos') renderIngresos(sec);
-    else if (activeTab==='egresos')  renderEgresos(sec);
-    else if (activeTab==='otros')    renderOtros(sec);
-  } catch(err) {
-    console.error('Error rendering tab', activeTab, err);
-    sec.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px;">Error: '+err.message+'<br><pre style="font-size:10px;white-space:pre-wrap;">'+err.stack+'</pre></div>';
-  }
+  if (activeTab==='resumen')   renderResumen(sec);
+  else if (activeTab==='ingresos') renderIngresos(sec);
+  else if (activeTab==='egresos')  renderEgresos(sec);
+  else if (activeTab==='otros')    renderOtros(sec);
   if (privacyMode) document.querySelectorAll('.pv').forEach(el=>el.classList.add('privacy-mask'));
 }
 
@@ -871,11 +866,12 @@ function renderResumen(sec) {
   const adjGastos   = adjs.filter(a=>a.type==='gasto');
 
   function renderAdjConceptRow(a, colorVar) {
+    const valores = a.valores || {};
     return `<tr class="manual-row"><td>
       ${a.desc} <span class="del-btn" onclick="deleteAdjustmentConcept('${a.id}')" title="Eliminar concepto entero">✕</span>
     </td>${cols.map(c=>{
       if (!c.isProj && !c.isCurrentProj) return `<td class="pv">—</td>`;
-      const v = a.valores[c.mes] || '';
+      const v = valores[c.mes] || '';
       return `<td class="pv proj" style="padding:4px 8px;">
         <div style="display:flex;align-items:center;gap:4px;">
           <input type="number" value="${v}" placeholder="—"
@@ -1277,7 +1273,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (_data.config && _data.config.flujoAjustes) {
       try {
         const _ra = JSON.parse(_data.config.flujoAjustes);
-        if (typeof setAdjCache === 'function') setAdjCache(Array.isArray(_ra) ? _ra : []);
+        const _raArr = Array.isArray(_ra) ? _ra : [];
+        if (typeof setAdjCache === 'function') setAdjCache(migrateAdjustments(_raArr));
       } catch(e) { console.warn('Could not parse flujoAjustes:', e); }
     }
     const _fl = document.getElementById('fileLabel');
