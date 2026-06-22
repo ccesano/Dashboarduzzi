@@ -865,7 +865,19 @@ function renderResumen(sec) {
   const adjIngresos = adjs.filter(a=>a.type==='ingreso');
   const adjGastos   = adjs.filter(a=>a.type==='gasto');
 
-  function renderAdjConceptRow(a, colorVar) {
+  // Format/unformat money inputs with Argentine style: 1.234.567,89
+function formatMoneyInput(input) {
+  let raw = input.value.replace(/[^0-9,]/g, '');
+  let parts = raw.split(',');
+  let intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  let decPart = parts.length > 1 ? (',' + parts[1].slice(0,2)) : '';
+  input.value = intPart + decPart;
+}
+function unformatMoneyInput(val) {
+  return val.replace(/\./g, '').replace(',', '.');
+}
+
+function renderAdjConceptRow(a, colorVar) {
     const valores = a.valores || {};
     return `<tr class="manual-row"><td>
       ${a.desc} <span class="del-btn" onclick="deleteAdjustmentConcept('${a.id}')" title="Eliminar concepto entero">✕</span>
@@ -877,14 +889,8 @@ function renderResumen(sec) {
         <div style="display:flex;align-items:center;gap:4px;">
           <input type="text" inputmode="decimal" value="${vDisplay}" placeholder="—"
             style="width:115px;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:${colorVar};font-size:12px;font-family:'DM Mono',monospace;padding:3px 5px;text-align:right;"
-            oninput="
-              let raw=this.value.replace(/[^0-9,]/g,'');
-              let parts=raw.split(',');
-              let intPart=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.');
-              let decPart=parts.length>1?(','+parts[1].slice(0,2)):'';
-              this.value=intPart+decPart;
-            "
-            onchange="updateAdjustmentValue('${a.id}','${c.mes}',this.value.replace(/\./g,'').replace(',','.'))">
+            oninput="formatMoneyInput(this)"
+            onchange="updateAdjustmentValue('${a.id}','${c.mes}',unformatMoneyInput(this.value))">
           ${v ? `<span onclick="updateAdjustmentValue('${a.id}','${c.mes}','0')" style="cursor:pointer;color:var(--muted2);font-size:11px;" title="Borrar este mes">✕</span>` : ''}
         </div>
       </td>`;
