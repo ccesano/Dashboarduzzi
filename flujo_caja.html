@@ -323,7 +323,7 @@ async function loadData(sheets = ['cobranzas']) {
       <span class="topbar-date" id="todayLabel">—</span>
       <div class="infl-wrap">
         <span class="infl-label">Inflación:</span>
-        <input class="infl-input" type="number" id="inflInput" value="3" min="0" max="100" step="0.5">
+        <input class="infl-input" type="number" id="inflInput" value="3" min="0" max="100" step="0.5" onchange="saveFlujoPrefs()">
         <span class="infl-label">%</span>
         <span class="infl-label" style="margin-left:4px;">Base:</span>
         <select class="proj-select" id="methodSelect" onchange="onMethodChange()">
@@ -331,26 +331,26 @@ async function loadData(sheets = ['cobranzas']) {
           <option value="last">Último mes completo</option>
           <option value="trend">Tendencia</option>
         </select>
-        <select class="proj-select" id="nMesesBaseSelect" onchange="buildDashboard()">
+        <select class="proj-select" id="nMesesBaseSelect" onchange="saveFlujoPrefs();buildDashboard()">
           <option value="3">de 3 meses</option>
           <option value="6" selected>de 6 meses</option>
           <option value="12">de 12 meses</option>
         </select>
         <span class="infl-label" style="margin-left:8px;">Mostrar:</span>
-        <select class="proj-select" id="histSelect" onchange="buildDashboard()">
+        <select class="proj-select" id="histSelect" onchange="saveFlujoPrefs();buildDashboard()">
           <option value="3">Últimos 3 meses</option>
           <option value="6" selected>Últimos 6 meses</option>
           <option value="12">Últimos 12 meses</option>
           <option value="all">Todo el histórico</option>
         </select>
         <span class="infl-label">Proyectar:</span>
-        <select class="proj-select" id="projSelect">
+        <select class="proj-select" id="projSelect" onchange="saveFlujoPrefs();buildDashboard()">
           <option value="3">3 meses</option>
           <option value="6" selected>6 meses</option>
           <option value="12">12 meses</option>
         </select>
       </div>
-      <button class="btn-update" onclick="buildDashboard()">↻ Actualizar</button>
+      <button class="btn-update" onclick="saveFlujoPrefs();buildDashboard()">↻ Actualizar</button>
       <button class="btn-export" onclick="exportExcel()">↓ Exportar Excel</button>
       <button class="privacy-btn" id="privacyBtn" onclick="togglePrivacy()">👁</button>
       <button onclick="logout()" style="padding:5px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;">↩ Salir</button>
@@ -872,11 +872,19 @@ function renderResumen(sec) {
     </td>${cols.map(c=>{
       if (!c.isProj && !c.isCurrentProj) return `<td class="pv">—</td>`;
       const v = valores[c.mes] || '';
+      const vDisplay = v ? v.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
       return `<td class="pv proj" style="padding:4px 8px;">
         <div style="display:flex;align-items:center;gap:4px;">
-          <input type="number" value="${v}" placeholder="—"
-            style="width:90px;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:${colorVar};font-size:12px;font-family:'DM Mono',monospace;padding:3px 5px;text-align:right;"
-            onchange="updateAdjustmentValue('${a.id}','${c.mes}',this.value)">
+          <input type="text" inputmode="decimal" value="${vDisplay}" placeholder="—"
+            style="width:115px;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:${colorVar};font-size:12px;font-family:'DM Mono',monospace;padding:3px 5px;text-align:right;"
+            oninput="
+              let raw=this.value.replace(/[^0-9,]/g,'');
+              let parts=raw.split(',');
+              let intPart=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+              let decPart=parts.length>1?(','+parts[1].slice(0,2)):'';
+              this.value=intPart+decPart;
+            "
+            onchange="updateAdjustmentValue('${a.id}','${c.mes}',this.value.replace(/\./g,'').replace(',','.'))">
           ${v ? `<span onclick="updateAdjustmentValue('${a.id}','${c.mes}','0')" style="cursor:pointer;color:var(--muted2);font-size:11px;" title="Borrar este mes">✕</span>` : ''}
         </div>
       </td>`;
@@ -1282,6 +1290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const _mins = Math.round((Date.now() - _data.ts) / 60000);
     const _ago  = _mins < 1 ? 'recién' : _mins < 60 ? 'hace ' + _mins + 'm' : 'hace ' + Math.round(_mins/60) + 'h';
     if (_fl) _fl.textContent = 'Google Sheets · ' + _ago;
+    restoreFlujoPrefs();
     buildDashboard();
   } catch(e) {
     console.error('Error loading data:', e);
@@ -1304,7 +1313,40 @@ function onMethodChange() {
   const method = document.getElementById('methodSelect')?.value;
   const sel = document.getElementById('nMesesBaseSelect');
   if (sel) sel.style.display = (method === 'avg' || method === 'trend') ? '' : 'none';
+  saveFlujoPrefs();
   buildDashboard();
+}
+
+// ── PERSIST UI PREFS (inflación, método, ventana, mostrar, proyectar) ──────────
+const FLUJO_PREFS_KEY = 'flujoCajaPrefs';
+
+function saveFlujoPrefs() {
+  try {
+    const prefs = {
+      infl:    document.getElementById('inflInput')?.value,
+      method:  document.getElementById('methodSelect')?.value,
+      nMeses:  document.getElementById('nMesesBaseSelect')?.value,
+      hist:    document.getElementById('histSelect')?.value,
+      proj:    document.getElementById('projSelect')?.value,
+    };
+    localStorage.setItem(FLUJO_PREFS_KEY, JSON.stringify(prefs));
+  } catch(e) {}
+}
+
+function restoreFlujoPrefs() {
+  try {
+    const prefs = JSON.parse(localStorage.getItem(FLUJO_PREFS_KEY) || 'null');
+    if (!prefs) return;
+    if (prefs.infl)   { const el=document.getElementById('inflInput');         if(el) el.value = prefs.infl; }
+    if (prefs.method) { const el=document.getElementById('methodSelect');      if(el) el.value = prefs.method; }
+    if (prefs.nMeses) { const el=document.getElementById('nMesesBaseSelect');  if(el) el.value = prefs.nMeses; }
+    if (prefs.hist)   { const el=document.getElementById('histSelect');        if(el) el.value = prefs.hist; }
+    if (prefs.proj)   { const el=document.getElementById('projSelect');        if(el) el.value = prefs.proj; }
+    // Sync visibility of nMesesBaseSelect with restored method
+    const method = document.getElementById('methodSelect')?.value;
+    const sel = document.getElementById('nMesesBaseSelect');
+    if (sel) sel.style.display = (method === 'avg' || method === 'trend') ? '' : 'none';
+  } catch(e) {}
 }
 </script>
 </body>
