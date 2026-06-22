@@ -865,19 +865,7 @@ function renderResumen(sec) {
   const adjIngresos = adjs.filter(a=>a.type==='ingreso');
   const adjGastos   = adjs.filter(a=>a.type==='gasto');
 
-  // Format/unformat money inputs with Argentine style: 1.234.567,89
-function formatMoneyInput(input) {
-  let raw = input.value.replace(/[^0-9,]/g, '');
-  let parts = raw.split(',');
-  let intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  let decPart = parts.length > 1 ? (',' + parts[1].slice(0,2)) : '';
-  input.value = intPart + decPart;
-}
-function unformatMoneyInput(val) {
-  return val.replace(/\./g, '').replace(',', '.');
-}
-
-function renderAdjConceptRow(a, colorVar) {
+  function renderAdjConceptRow(a, colorVar) {
     const valores = a.valores || {};
     return `<tr class="manual-row"><td>
       ${a.desc} <span class="del-btn" onclick="deleteAdjustmentConcept('${a.id}')" title="Eliminar concepto entero">✕</span>
@@ -1313,6 +1301,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 function logout() {
   sessionStorage.removeItem('dashToken');
   window.location.href = 'login.html';
+}
+
+// Format/unformat money inputs with Argentine style: 1.234.567,89
+function formatMoneyInput(input) {
+  let raw = input.value.replace(/[^0-9,]/g, '');
+  let parts = raw.split(',');
+  let intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  let decPart = parts.length > 1 ? (',' + parts[1].slice(0,2)) : '';
+  input.value = intPart + decPart;
+}
+function unformatMoneyInput(val) {
+  return val.replace(/\./g, '').replace(',', '.');
 }
 
 function onMethodChange() {
