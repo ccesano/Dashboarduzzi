@@ -907,15 +907,42 @@ function renderResumen(sec) {
     </div>
   </td></tr>`;
 
-  // SALDO NETO row (including manual adjustments)
-  html += `<tr class="neto-row"><td>SALDO NETO</td>${cols.map(c=>{
+  // Compute SALDO NETO per column once, reused for both rows below
+  const netoPorCol = cols.map(c => {
     const ing  = getCobVal(c)+getOIVal(c)+getCobNoRecVal(c)+getOINoRecVal(c);
     const egr  = CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,c),0)+getPagNoRecVal(c);
     const adjI = resolveAdjVal(c, adjs, 'ingreso');
     const adjG = resolveAdjVal(c, adjs, 'gasto');
-    const neto = ing + adjI - egr - adjG;
+    return ing + adjI - egr - adjG;
+  });
+
+  // SALDO NETO row (including manual adjustments)
+  html += `<tr class="neto-row"><td>SALDO NETO</td>${cols.map((c,i)=>{
+    const neto = netoPorCol[i];
     const projClass=c.isProj?' proj proj-val':'';
     return `<td class="pv${projClass}" style="color:${neto>=0?'var(--green)':'var(--red)'};font-weight:700;">${fmt(neto)}</td>`;
+  }).join('')}</tr>`;
+
+  // RESULTADO ACUMULADO ANUAL — running sum from January of each column's year up to that column.
+  // The current month is split into two columns (real + proyectado) representing the SAME month —
+  // count it only once per position: use the real half while standing on it, and the proyectado half
+  // while standing on it, but never both at once for a given target column.
+  html += `<tr class="neto-row" style="border-top:1px dashed var(--border2);"><td>Resultado Acumulado Anual</td>${cols.map((c,i)=>{
+    const year = c.mes.slice(0,4);
+    let acumulado = 0;
+    const seenMeses = new Set();
+    for (let j=0; j<=i; j++) {
+      const mj = cols[j].mes;
+      if (cols[j].mes.slice(0,4) !== year) continue;
+      // Always include the column we're standing on (j===i), even if its mes was
+      // already seen earlier (this happens for the current month's proyectado half,
+      // which must REPLACE the real half's contribution, not add to it).
+      if (j !== i && seenMeses.has(mj)) continue;
+      seenMeses.add(mj);
+      acumulado += netoPorCol[j];
+    }
+    const projClass=c.isProj?' proj proj-val':'';
+    return `<td class="pv${projClass}" style="color:${acumulado>=0?'var(--green)':'var(--red)'};font-weight:700;">${fmt(acumulado)}</td>`;
   }).join('')}</tr>`;
 
   html += `</tbody></table></div>`;
