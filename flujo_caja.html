@@ -923,13 +923,12 @@ function renderResumen(sec) {
     return `<td class="pv${projClass}" style="color:${neto>=0?'var(--green)':'var(--red)'};font-weight:700;">${fmt(neto)}</td>`;
   }).join('')}</tr>`;
 
-  // RESULTADO ACUMULADO ANUAL — running sum from January of each column's year up to that column.
-  // The current month is split into two columns (real + proyectado) representing the SAME month —
-  // count it only once per position: use the real half while standing on it, and the proyectado half
-  // while standing on it, but never both at once for a given target column.
+  // RESULTADO ACUMULADO ANUAL — saldo inicial del año + running sum of monthly results
+  // up to that column. Current month's real/proyectado halves never double-count (see below).
   html += `<tr class="neto-row" style="border-top:1px dashed var(--border2);"><td>Resultado Acumulado Anual</td>${cols.map((c,i)=>{
     const year = c.mes.slice(0,4);
-    let acumulado = 0;
+    const saldoInicial = parseFloat(remoteConfig['saldoInicial_'+year]) || 0;
+    let acumulado = saldoInicial;
     const seenMeses = new Set();
     for (let j=0; j<=i; j++) {
       const mj = cols[j].mes;

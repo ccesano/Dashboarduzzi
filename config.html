@@ -368,6 +368,21 @@ function renderConfig() {
         </div>
         <button class="btn-save-row" id="btn-norecur" onclick="saveNoRecur()">Guardar</button>
       </div>
+
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;margin-bottom:4px;">Saldo Inicial Anual</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+          Monto de caja disponible al 1° de enero de cada año — se suma como base en la fila "Resultado Acumulado Anual" del Flujo de Caja.
+        </div>
+        <div id="saldoInicialList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="number" id="saldoInicialAnioInput" placeholder="Año (ej: 2026)" min="2000" max="2100"
+            style="width:130px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;outline:none;font-family:'DM Mono',monospace;">
+          <input type="number" id="saldoInicialValInput" placeholder="Monto $" min="0"
+            style="width:180px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;outline:none;font-family:'DM Mono',monospace;">
+          <button class="btn-save-row" onclick="addSaldoInicial()">+ Agregar año</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -393,7 +408,8 @@ function renderConfig() {
     </div>
   </div>`;
 
-  setTimeout(renderPadron, 0);}
+  setTimeout(renderPadron, 0);
+  setTimeout(renderSaldoInicial, 0);}
 
 // ── Tag input helpers ─────────────────────────────────────────────────────────
 function addTag(e, tagsId, inputId) {
@@ -551,6 +567,74 @@ async function deletePadron(mes) {
   await saveKey('padron_'+mes, '', null);
   delete remoteConfig['padron_'+mes];
   renderPadron();
+}
+
+// ── SALDO INICIAL ANUAL ───────────────────────────────────────────────────────
+function renderSaldoInicial() {
+  const saldos = {};
+  Object.keys(remoteConfig).forEach(k => {
+    if (k.startsWith('saldoInicial_')) {
+      saldos[k.replace('saldoInicial_','')] = remoteConfig[k];
+    }
+  });
+
+  const sorted = Object.keys(saldos).sort();
+  const list = document.getElementById('saldoInicialList');
+  if (!list) return;
+
+  if (!sorted.length) {
+    list.innerHTML = `<div style="color:var(--muted);font-size:12px;grid-column:1/-1;">
+      Sin saldo inicial configurado — el Resultado Acumulado Anual arranca desde $0 cada año.</div>`;
+    return;
+  }
+
+  list.innerHTML = sorted.map(anio => {
+    const monto = parseFloat(saldos[anio]) || 0;
+    const montoFmt = monto.toLocaleString('es-AR');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;
+      background:var(--surface2);border:1px solid var(--border2);border-radius:8px;">
+      <span style="font-size:12px;font-weight:600;flex:1;">Año ${anio}</span>
+      <input type="text" value="${montoFmt}" inputmode="numeric"
+        style="width:110px;padding:4px 7px;background:var(--bg);border:1px solid var(--border2);
+        border-radius:6px;color:var(--text);font-size:12px;font-family:'DM Mono',monospace;outline:none;text-align:right;"
+        oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.')"
+        onchange="updateSaldoInicial('${anio}', this.value.replace(/\./g,''), this)"
+        id="saldoInicialInput_${anio}">
+      <span onclick="deleteSaldoInicial('${anio}')"
+        style="color:var(--muted2);cursor:pointer;font-size:13px;padding:2px 4px;"
+        title="Eliminar">✕</span>
+    </div>`;
+  }).join('');
+}
+
+async function addSaldoInicial() {
+  const anio = document.getElementById('saldoInicialAnioInput').value;
+  const val  = document.getElementById('saldoInicialValInput').value;
+  if (!anio || val==='' || parseFloat(val) < 0) {
+    alert('Completá el año y el monto.'); return;
+  }
+  await saveKey('saldoInicial_'+anio, val, null);
+  remoteConfig['saldoInicial_'+anio] = val;
+  document.getElementById('saldoInicialAnioInput').value = '';
+  document.getElementById('saldoInicialValInput').value = '';
+  renderSaldoInicial();
+}
+
+async function updateSaldoInicial(anio, val, inputEl) {
+  if (val==='' || parseFloat(val) < 0) return;
+  await saveKey('saldoInicial_'+anio, val, null);
+  remoteConfig['saldoInicial_'+anio] = val;
+  if (inputEl) {
+    inputEl.style.borderColor = 'var(--green)';
+    setTimeout(() => { inputEl.style.borderColor = 'var(--border2)'; }, 1500);
+  }
+}
+
+async function deleteSaldoInicial(anio) {
+  if (!confirm(`¿Eliminar saldo inicial de ${anio}?`)) return;
+  await saveKey('saldoInicial_'+anio, '', null);
+  delete remoteConfig['saldoInicial_'+anio];
+  renderSaldoInicial();
 }
 </script>
 </body>
