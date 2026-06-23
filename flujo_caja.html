@@ -944,6 +944,13 @@ function renderResumen(sec) {
     return `<td class="pv${projClass}" style="color:${acumulado>=0?'var(--green)':'var(--red)'};font-weight:700;">${fmt(acumulado)}</td>`;
   }).join('')}</tr>`;
 
+  // SALDO INICIAL — informational row, shows the configured base for each column's year
+  html += `<tr><td style="color:var(--muted2);font-size:11px;">Saldo Inicial del Año</td>${cols.map(c=>{
+    const year = c.mes.slice(0,4);
+    const saldoInicial = parseFloat(remoteConfig['saldoInicial_'+year]) || 0;
+    return `<td class="pv" style="color:var(--muted2);font-size:11px;font-family:'DM Mono',monospace;">${saldoInicial>0?fmt(saldoInicial):'—'}</td>`;
+  }).join('')}</tr>`;
+
   html += `</tbody></table></div>`;
   sec.innerHTML = html;
 }
