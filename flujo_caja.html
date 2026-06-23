@@ -389,7 +389,7 @@ const MSHORT    = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct
 const MNAMES    = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 let cobRows = [], pagRows = [], otrosRows = [];
-let allMeses = [], projMeses = [], completeMeses = [];
+let allMeses = [], projMeses = [], completeMeses = [], allRealMeses = [];
 let remoteConfig = {};
 let curMes = '';
 let activeTab = 'resumen';
@@ -448,7 +448,7 @@ function buildDashboard() {
   const nProj = parseInt(document.getElementById('projSelect').value)||6;
 
   // ALL real months from data (full history, used to compute complete projection base)
-  const allRealMeses = [...new Set([
+  allRealMeses = [...new Set([
     ...cobRows.map(r=>r.Mes),
     ...pagRows.map(r=>r.Mes)
   ])].sort();
@@ -924,22 +924,41 @@ function renderResumen(sec) {
   }).join('')}</tr>`;
 
   // RESULTADO ACUMULADO ANUAL — saldo inicial del año + running sum of monthly results
-  // up to that column. Current month's real/proyectado halves never double-count (see below).
+  // up to that column. Uses the FULL month universe (allRealMeses + projMeses), NOT just
+  // the filtered 'cols' (which respects the "Mostrar" window) — otherwise hiding earlier
+  // months of the year would silently drop them from the accumulator.
+  const fullMesesUniverse = [...new Set([...allRealMeses, ...projMeses])].sort();
+  function netoForMes(mes, wantProj) {
+    // Recompute the net result for a SPECIFIC month, independent of what's visible in cols.
+    // wantProj=true means "use the projected value for this month" (only meaningful for curMes/futuro).
+    const fakeCol = mes === curMes
+      ? (wantProj ? { mes, key: mes+'__proj', isProj:true, isCurrentProj:true }
+                  : { mes, key: mes,          isProj:false, isCurrentReal:true })
+      : { mes, key: mes, isProj: projMeses.includes(mes) };
+    const ing  = getCobVal(fakeCol)+getOIVal(fakeCol)+getCobNoRecVal(fakeCol)+getOINoRecVal(fakeCol);
+    const egr  = CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,fakeCol),0)+getPagNoRecVal(fakeCol);
+    const adjI = resolveAdjVal(fakeCol, adjs, 'ingreso');
+    const adjG = resolveAdjVal(fakeCol, adjs, 'gasto');
+    return ing + adjI - egr - adjG;
+  }
+
   html += `<tr class="neto-row" style="border-top:1px dashed var(--border2);"><td>Resultado Acumulado Anual</td>${cols.map((c,i)=>{
     const year = c.mes.slice(0,4);
     const saldoInicial = parseFloat(remoteConfig['saldoInicial_'+year]) || 0;
     let acumulado = saldoInicial;
-    const seenMeses = new Set();
-    for (let j=0; j<=i; j++) {
-      const mj = cols[j].mes;
-      if (cols[j].mes.slice(0,4) !== year) continue;
-      // Always include the column we're standing on (j===i), even if its mes was
-      // already seen earlier (this happens for the current month's proyectado half,
-      // which must REPLACE the real half's contribution, not add to it).
-      if (j !== i && seenMeses.has(mj)) continue;
-      seenMeses.add(mj);
-      acumulado += netoPorCol[j];
-    }
+    // Walk every real month of the year UP TO (and not including) the target month,
+    // using each month's REAL value (never projected) — these are settled, past months.
+    fullMesesUniverse.forEach(mes => {
+      if (mes.slice(0,4) !== year) return;
+      if (mes >= c.mes) return; // strictly before the target month
+      if (mes === curMes) { acumulado += netoForMes(mes, false); return; } // current month: real only, if it's before target (shouldn't normally happen)
+      acumulado += netoForMes(mes, false);
+    });
+    // Add the target month itself, using real or projected depending on which half we're standing on
+    if (c.isCurrentReal) acumulado += netoForMes(c.mes, false);
+    else if (c.isCurrentProj) acumulado += netoForMes(c.mes, true);
+    else acumulado += netoForMes(c.mes, c.isProj);
+
     const projClass=c.isProj?' proj proj-val':'';
     return `<td class="pv${projClass}" style="color:${acumulado>=0?'var(--green)':'var(--red)'};font-weight:700;">${fmt(acumulado)}</td>`;
   }).join('')}</tr>`;
