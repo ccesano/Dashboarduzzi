@@ -62,6 +62,9 @@ module.exports = async function handler(req, res) {
     if (isNewColumn) extColIdx = header.length; // will be appended
 
     // Locate the matching data row by Fecha+Sucursal+Destino+Monto(+Personal)
+    // fecha arrives already normalized as 'YYYY-MM-DD' (same as the frontend's parseDate output) —
+    // so the raw Sheets date must be normalized the SAME way before comparing, since Sheets may
+    // store dates as 'DD/MM/YYYY[ HH:mm]', as 'YYYY-MM-DD', or as a raw Excel/Sheets serial number.
     const fechaNorm = String(fecha).trim();
     const sucNorm   = String(sucursal||'').trim();
     const destNorm  = String(destino).trim();
@@ -72,11 +75,11 @@ module.exports = async function handler(req, res) {
     for (let i = hdrIdx + 1; i < rows.length; i++) {
       const r = rows[i];
       if (!r[L.fecha]) continue;
-      const rFecha = String(r[L.fecha]).trim();
+      const rFecha = normalizeDate(r[L.fecha]);
       const rSuc   = String(r[L.sucursal]||'').trim();
       const rDest  = String(r[L.destino]||'').trim();
       const rPers  = String(r[L.personal]||'').trim();
-      const rMonto = parseFloat(String(r[L.monto]||'0').replace(/[^0-9.,-]/g,'').replace(',','.'));
+      const rMonto = parseMontoServer(r[L.monto]);
       if (rFecha === fechaNorm && rSuc === sucNorm && rDest === destNorm &&
           rPers === persNorm && Math.abs(rMonto - montoNum) < 0.5) {
         foundRowIdx = i;
@@ -113,6 +116,42 @@ async function writeCell(token, sheetId, sheetName, colLetter, rowNumber1Indexed
     body: JSON.stringify({ values: [[value]] })
   });
   if (!resp.ok) throw new Error('Error writing cell: ' + await resp.text());
+}
+
+function parseMontoServer(s) {
+  // Mirrors the frontend's parseMonto(): handles '1.234,56' (AR), '1,234.56' (US),
+  // plain '1234.56', and values with a leading '$'.
+  if (!s && s !== 0) return 0;
+  let str = String(s).trim().replace(/[$\s]/g, '');
+  if (str === '' || str === '-') return 0;
+  if (/^\d+(\.\d{1,2})?$/.test(str)) return parseFloat(str) || 0;
+  if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(str)) {
+    return parseFloat(str.replace(/\./g,'').replace(',','.')) || 0;
+  }
+  if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(str)) {
+    return parseFloat(str.replace(/,/g,'')) || 0;
+  }
+  str = str.replace(/[^\d.,]/g,'');
+  const lastDot = str.lastIndexOf('.');
+  const lastComma = str.lastIndexOf(',');
+  if (lastComma > lastDot) return parseFloat(str.replace(/\./g,'').replace(',','.')) || 0;
+  return parseFloat(str.replace(/,/g,'')) || 0;
+}
+
+function normalizeDate(raw) {
+  // Mirrors the frontend's parseDate(): handles 'DD/MM/YYYY[ HH:mm]', 'YYYY-MM-DD',
+  // and raw Excel/Sheets date serial numbers — always returns 'YYYY-MM-DD' or ''.
+  if (!raw) return '';
+  const str = String(raw).trim();
+  let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+  m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return str.slice(0,10);
+  if (/^\d+(\.\d+)?$/.test(str)) {
+    const d = new Date((parseFloat(str) - 25569) * 86400 * 1000);
+    return d.toISOString().slice(0,10);
+  }
+  return '';
 }
 
 function colIndexToLetter(idx) {
