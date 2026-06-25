@@ -398,11 +398,15 @@ function parseSheetRows(rows, type) {
     if (String(rows[i][0]||'').trim() === 'Fecha') { hdrIdx = i; break; }
   }
   if (hdrIdx < 0) return [];
+  // "Extraordinario" column may exist at a different index per sheet — locate by header text
+  const header = rows[hdrIdx] || [];
+  const extColIdx = header.findIndex(h => String(h||'').trim() === 'Extraordinario');
   const result = [];
   for (let i = hdrIdx + 1; i < rows.length; i++) {
     const r = rows[i];
     if (!r[0] || String(r[0]).trim() === '') continue;
     const dia = parseDate(String(r[0]).trim()); if (!dia) continue;
+    const esExtraordinario = extColIdx >= 0 && String(r[extColIdx]||'').trim().toUpperCase() === 'SI';
     if (type === 'cobranzas') {
       const sub = parseMonto(r[8]);
       if (sub < 0) continue;
@@ -411,7 +415,8 @@ function parseSheetRows(rows, type) {
       if (SUC_ACTIVE[suc] === false) continue;
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
         Personal:String(r[3]||'').trim(), CondicionVenta:String(r[4]||'').trim(),
-        Destino:String(r[6]||'').trim(), Alumno:String(r[7]||'').trim(), Subtotal:sub });
+        Destino:String(r[6]||'').trim(), Alumno:String(r[7]||'').trim(), Subtotal:sub,
+        Extraordinario:esExtraordinario });
     } else if (type === 'pagos') {
       const monto = parseMonto(r[7]);
       if (monto <= 0) continue;
@@ -423,7 +428,7 @@ function parseSheetRows(rows, type) {
       if (PATTERNS.some(p => dest.includes(p))) continue;
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
         Personal:String(r[3]||'').trim(), Observaciones:String(r[4]||'').trim(),
-        Destino:dest, Monto:monto });
+        Destino:dest, Monto:monto, Extraordinario:esExtraordinario });
     } else if (type === 'otros') {
       const monto = parseMonto(r[5]);
       if (monto <= 0) continue;
@@ -432,7 +437,7 @@ function parseSheetRows(rows, type) {
       const conc = String(r[3]||'').trim();
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:String(r[1]||'').trim(),
         Personal:String(r[2]||'').trim(), Concepto:conc,
-        Observaciones:obs, Monto:monto });
+        Observaciones:obs, Monto:monto, Extraordinario:esExtraordinario });
     }
   }
   return result;
@@ -557,6 +562,7 @@ async function loadData(sheets = ['cobranzas']) {
               <th onclick="sortBy('Alumno')"         data-col="Alumno">Alumno</th>
               <th onclick="sortBy('Personal')"       data-col="Personal">Personal</th>
               <th onclick="sortBy('Subtotal')"       data-col="Subtotal" style="text-align:right;">Monto</th>
+              <th style="text-align:center;width:36px;" title="Marcar movimiento puntual — se excluye de las proyecciones">⚡</th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -1320,6 +1326,7 @@ function renderTable() {
   const body = document.getElementById('tableBody');
   body.innerHTML = sl.length ? sl.map(r => {
     const sc = 'suc-'+r.Sucursal.toLowerCase().replace('ñ','n').replace('é','e');
+    const marcado = r.Extraordinario;
     return `<tr>
       <td class="mono">${fmtDate(r.Dia)}</td>
       <td><span class="suc-badge ${sc}">${SUC_NAMES[r.Sucursal]||r.Sucursal}</span></td>
@@ -1328,8 +1335,13 @@ function renderTable() {
       <td style="color:var(--muted2)">${r.Alumno}</td>
       <td style="color:var(--muted2);font-size:11px">${r.Personal}</td>
       <td class="amt">${fmt(r.Subtotal)}</td>
+      <td style="text-align:center;">
+        <span onclick='toggleExtraordinario(this,"${r.Dia}","${r.Sucursal}","${(r.Destino||'').replace(/'/g,"\'")}",${r.Subtotal},"${(r.Personal||'').replace(/'/g,"\'")}",${!marcado})'
+          title="${marcado?'Movimiento puntual — click para desmarcar':'Marcar como movimiento puntual (no se proyecta)'}"
+          style="cursor:pointer;font-size:14px;opacity:${marcado?'1':'0.25'};${marcado?'filter:drop-shadow(0 0 3px rgba(232,197,71,.6));':''}">⚡</span>
+      </td>
     </tr>`;
-  }).join('') : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Sin resultados</td></tr>`;
+  }).join('') : `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Sin resultados</td></tr>`;
 
   const lbl = document.getElementById('tableSubLabel');
   const todayCtx = periodFilter === 'hoy' ? ' (solo hoy)' : '';
@@ -1451,6 +1463,40 @@ document.addEventListener('DOMContentLoaded', async () => {
 function logout() {
   sessionStorage.removeItem('dashToken');
   window.location.href = 'login.html';
+}
+
+// ── EXTRAORDINARIO TOGGLE ──────────────────────────────────────────────────────
+async function toggleExtraordinario(el, fecha, sucursal, destino, monto, personal, mark) {
+  const msg = mark
+    ? `¿Marcar este cobro de ${fmt(monto)} en "${destino}" del ${fmtDate(fecha)} como movimiento puntual?\n\nSe va a seguir contando en el resultado de ese mes, pero NO se va a usar para calcular las proyecciones futuras.`
+    : `¿Quitar la marca de movimiento puntual de este cobro de ${fmt(monto)} en "${destino}"?\n\nVolverá a tenerse en cuenta para las proyecciones futuras.`;
+  if (!confirm(msg)) return;
+
+  const token = sessionStorage.getItem('dashToken');
+  el.style.opacity = '0.4'; el.style.cursor = 'wait';
+  try {
+    const resp = await fetch('/api/mark-extraordinario', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sheetName: 'Cobranzas', fecha, sucursal, destino, monto, personal, mark })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(()=>({error:'Error desconocido'}));
+      throw new Error(err.error || 'Error al guardar');
+    }
+    const row = allRows.find(r => r.Dia===fecha && r.Sucursal===sucursal && r.Destino===destino &&
+      Math.abs(r.Subtotal-monto)<0.5 && r.Personal===personal);
+    if (row) row.Extraordinario = mark;
+    const rowF = filtRows.find(r => r.Dia===fecha && r.Sucursal===sucursal && r.Destino===destino &&
+      Math.abs(r.Subtotal-monto)<0.5 && r.Personal===personal);
+    if (rowF) rowF.Extraordinario = mark;
+    renderTable();
+  } catch(e) {
+    alert('Error: ' + e.message);
+    el.style.opacity = mark ? '0.25' : '1';
+  } finally {
+    el.style.cursor = 'pointer';
+  }
 }
 </script>
 </body>

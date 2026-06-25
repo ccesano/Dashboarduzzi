@@ -172,11 +172,15 @@ function parseSheetRows(rows, type) {
     if (String(rows[i][0]||'').trim() === 'Fecha') { hdrIdx = i; break; }
   }
   if (hdrIdx < 0) return [];
+  // "Extraordinario" column may exist at a different index per sheet — locate by header text
+  const header = rows[hdrIdx] || [];
+  const extColIdx = header.findIndex(h => String(h||'').trim() === 'Extraordinario');
   const result = [];
   for (let i = hdrIdx + 1; i < rows.length; i++) {
     const r = rows[i];
     if (!r[0] || String(r[0]).trim() === '') continue;
     const dia = parseDate(String(r[0]).trim()); if (!dia) continue;
+    const esExtraordinario = extColIdx >= 0 && String(r[extColIdx]||'').trim().toUpperCase() === 'SI';
     if (type === 'cobranzas') {
       const sub = parseMonto(r[8]);
       if (sub < 0) continue;
@@ -185,7 +189,8 @@ function parseSheetRows(rows, type) {
       if (SUC_ACTIVE[suc] === false) continue;
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
         Personal:String(r[3]||'').trim(), CondicionVenta:String(r[4]||'').trim(),
-        Destino:String(r[6]||'').trim(), Alumno:String(r[7]||'').trim(), Subtotal:sub });
+        Destino:String(r[6]||'').trim(), Alumno:String(r[7]||'').trim(), Subtotal:sub,
+        Extraordinario:esExtraordinario });
     } else if (type === 'pagos') {
       const monto = parseMonto(r[7]);
       if (monto <= 0) continue;
@@ -197,7 +202,7 @@ function parseSheetRows(rows, type) {
       if (PATTERNS.some(p => dest.includes(p))) continue;
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
         Personal:String(r[3]||'').trim(), Observaciones:String(r[4]||'').trim(),
-        Destino:dest, Monto:monto });
+        Destino:dest, Monto:monto, Extraordinario:esExtraordinario });
     } else if (type === 'otros') {
       const monto = parseMonto(r[5]);
       if (monto <= 0) continue;
@@ -206,7 +211,7 @@ function parseSheetRows(rows, type) {
       const conc = String(r[3]||'').trim();
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:String(r[1]||'').trim(),
         Personal:String(r[2]||'').trim(), Concepto:conc,
-        Observaciones:obs, Monto:monto });
+        Observaciones:obs, Monto:monto, Extraordinario:esExtraordinario });
     }
   }
   return result;

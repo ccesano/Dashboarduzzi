@@ -207,11 +207,15 @@ function parseSheetRows(rows, type) {
     if (String(rows[i][0]||'').trim() === 'Fecha') { hdrIdx = i; break; }
   }
   if (hdrIdx < 0) return [];
+  // "Extraordinario" column may exist at a different index per sheet — locate by header text
+  const header = rows[hdrIdx] || [];
+  const extColIdx = header.findIndex(h => String(h||'').trim() === 'Extraordinario');
   const result = [];
   for (let i = hdrIdx + 1; i < rows.length; i++) {
     const r = rows[i];
     if (!r[0] || String(r[0]).trim() === '') continue;
     const dia = parseDate(String(r[0]).trim()); if (!dia) continue;
+    const esExtraordinario = extColIdx >= 0 && String(r[extColIdx]||'').trim().toUpperCase() === 'SI';
     if (type === 'cobranzas') {
       const sub = parseMonto(r[8]);
       if (sub < 0) continue;
@@ -220,7 +224,8 @@ function parseSheetRows(rows, type) {
       if (SUC_ACTIVE[suc] === false) continue;
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
         Personal:String(r[3]||'').trim(), CondicionVenta:String(r[4]||'').trim(),
-        Destino:String(r[6]||'').trim(), Alumno:String(r[7]||'').trim(), Subtotal:sub });
+        Destino:String(r[6]||'').trim(), Alumno:String(r[7]||'').trim(), Subtotal:sub,
+        Extraordinario:esExtraordinario });
     } else if (type === 'pagos') {
       const monto = parseMonto(r[7]);
       if (monto <= 0) continue;
@@ -232,7 +237,7 @@ function parseSheetRows(rows, type) {
       if (PATTERNS.some(p => dest.includes(p))) continue;
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:suc,
         Personal:String(r[3]||'').trim(), Observaciones:String(r[4]||'').trim(),
-        Destino:dest, Monto:monto });
+        Destino:dest, Monto:monto, Extraordinario:esExtraordinario });
     } else if (type === 'otros') {
       const monto = parseMonto(r[5]);
       if (monto <= 0) continue;
@@ -241,7 +246,7 @@ function parseSheetRows(rows, type) {
       const conc = String(r[3]||'').trim();
       result.push({ Dia:dia, Mes:dia.slice(0,7), Sucursal:String(r[1]||'').trim(),
         Personal:String(r[2]||'').trim(), Concepto:conc,
-        Observaciones:obs, Monto:monto });
+        Observaciones:obs, Monto:monto, Extraordinario:esExtraordinario });
     }
   }
   return result;
@@ -501,12 +506,13 @@ function computeProjBase(completeMesesArg, cobRows, pagRows, otrosRows, infl) {
   // Delegates per-destino base calc to the single shared baseValForSeries()
   // so every part of the page (chart, resumen, ingresos, egresos, otros) is
   // guaranteed to use the exact same method + window size.
+  // Excludes rows flagged Extraordinario — punctual movements never feed the projection base.
   const method = document.getElementById('methodSelect')?.value || 'avg';
 
   const aggCob={}, aggPag={}, aggOtros={};
-  cobRows.forEach(r=>{ if(!aggCob[r.Mes]) aggCob[r.Mes]={}; aggCob[r.Mes][r.Destino]=(aggCob[r.Mes][r.Destino]||0)+r.Subtotal; });
-  pagRows.forEach(r=>{ if(!aggPag[r.Mes]) aggPag[r.Mes]={}; aggPag[r.Mes][r.Destino]=(aggPag[r.Mes][r.Destino]||0)+r.Monto; });
-  otrosRows.forEach(r=>{ if(!aggOtros[r.Mes]) aggOtros[r.Mes]={}; aggOtros[r.Mes][r.Concepto||r.Destino]=(aggOtros[r.Mes][r.Concepto||r.Destino]||0)+r.Monto; });
+  cobRows.forEach(r=>{ if(r.Extraordinario) return; if(!aggCob[r.Mes]) aggCob[r.Mes]={}; aggCob[r.Mes][r.Destino]=(aggCob[r.Mes][r.Destino]||0)+r.Subtotal; });
+  pagRows.forEach(r=>{ if(r.Extraordinario) return; if(!aggPag[r.Mes]) aggPag[r.Mes]={}; aggPag[r.Mes][r.Destino]=(aggPag[r.Mes][r.Destino]||0)+r.Monto; });
+  otrosRows.forEach(r=>{ if(r.Extraordinario) return; if(!aggOtros[r.Mes]) aggOtros[r.Mes]={}; aggOtros[r.Mes][r.Concepto||r.Destino]=(aggOtros[r.Mes][r.Concepto||r.Destino]||0)+r.Monto; });
 
   // Re-shape aggCob[mes][destino] → aggByDest[destino][mes] for baseValForSeries
   function byDest(agg, destinos) {
@@ -624,17 +630,31 @@ function renderChart(realMeses) { /* called before DOM ready, skip */ }
 
 function renderChart2(realMeses) {
   const cols = getColumns();
-  const aggByDestCob = {};
-  cobRows.forEach(r=>{ if(!aggByDestCob[r.Destino]) aggByDestCob[r.Destino]={}; aggByDestCob[r.Destino][r.Mes]=(aggByDestCob[r.Destino][r.Mes]||0)+r.Subtotal; });
-  const aggByDestPag = {};
-  pagRows.forEach(r=>{ if(!aggByDestPag[r.Destino]) aggByDestPag[r.Destino]={}; aggByDestPag[r.Destino][r.Mes]=(aggByDestPag[r.Destino][r.Mes]||0)+r.Monto; });
+  const aggByDestCob = {}, aggByDestCobSinExtra = {};
+  cobRows.forEach(r=>{
+    if(!aggByDestCob[r.Destino]) aggByDestCob[r.Destino]={};
+    aggByDestCob[r.Destino][r.Mes]=(aggByDestCob[r.Destino][r.Mes]||0)+r.Subtotal;
+    if (!r.Extraordinario) {
+      if(!aggByDestCobSinExtra[r.Destino]) aggByDestCobSinExtra[r.Destino]={};
+      aggByDestCobSinExtra[r.Destino][r.Mes]=(aggByDestCobSinExtra[r.Destino][r.Mes]||0)+r.Subtotal;
+    }
+  });
+  const aggByDestPag = {}, aggByDestPagSinExtra = {};
+  pagRows.forEach(r=>{
+    if(!aggByDestPag[r.Destino]) aggByDestPag[r.Destino]={};
+    aggByDestPag[r.Destino][r.Mes]=(aggByDestPag[r.Destino][r.Mes]||0)+r.Monto;
+    if (!r.Extraordinario) {
+      if(!aggByDestPagSinExtra[r.Destino]) aggByDestPagSinExtra[r.Destino]={};
+      aggByDestPagSinExtra[r.Destino][r.Mes]=(aggByDestPagSinExtra[r.Destino][r.Mes]||0)+r.Monto;
+    }
+  });
 
   const cobDests = Object.keys(aggByDestCob);
   const pagDests = Object.keys(aggByDestPag);
 
   // Use the same per-destino resolveVal logic as the tables — respects no-recurrentes + dual current month
-  const ingData = cols.map(c => cobDests.reduce((s,d)=>s+resolveVal(c, aggByDestCob[d], d), 0));
-  const egrData = cols.map(c => pagDests.reduce((s,d)=>s+resolveVal(c, aggByDestPag[d], d), 0));
+  const ingData = cols.map(c => cobDests.reduce((s,d)=>s+resolveVal(c, aggByDestCob[d], d, false, aggByDestCobSinExtra[d]||{}), 0));
+  const egrData = cols.map(c => pagDests.reduce((s,d)=>s+resolveVal(c, aggByDestPag[d], d, false, aggByDestPagSinExtra[d]||{}), 0));
 
   const ctx = document.getElementById('flowChart')?.getContext('2d'); if (!ctx) return;
   if (chartInst) { chartInst.destroy(); chartInst=null; }
@@ -712,8 +732,12 @@ function isNoRecurrente(concepto) {
 
 // Resolve the value for a given column key for a destino-based series.
 // aggByMes: { 'YYYY-MM': number }. Handles real/proj/current-split + no-recurrente rule.
-function resolveVal(col, aggByMes, concepto, forceNoRecur) {
+function resolveVal(col, aggByMes, concepto, forceNoRecur, aggByMesSinExtra) {
   const noRecur = forceNoRecur || isNoRecurrente(concepto);
+  // Use the "sin extraordinarios" series for the PROJECTION BASE when available —
+  // punctual movements (Bienes Personales, estudios de marketing, cartillas, etc.)
+  // still count toward the real result of their month, but never pull the average/tendencia up.
+  const aggForBase = aggByMesSinExtra || aggByMes;
 
   if (col.isCurrentReal) {
     // Always the real partial data for the current month — never projected
@@ -723,12 +747,12 @@ function resolveVal(col, aggByMes, concepto, forceNoRecur) {
     // Projected close of the CURRENT month — exponent 0 (no inflation compounding yet,
     // this is an estimate of the SAME month, not a future one)
     if (noRecur) return 0;
-    const avg = baseValForSeries(aggByMes);
+    const avg = baseValForSeries(aggForBase);
     return avg; // no inflFactor applied — this is the current month, not N months ahead
   }
   if (col.isProj) {
     if (noRecur) return 0;
-    const avg = baseValForSeries(aggByMes);
+    const avg = baseValForSeries(aggForBase);
     // projMeses[0] is the month right after curMes, so exponent should start at 1 there
     return avg * Math.pow(window._projBase.inflFactor, projMeses.indexOf(col.mes)+1);
   }
@@ -781,11 +805,36 @@ function valCell(v, isProj, cls='') {
 function renderResumen(sec) {
   const cols = getColumns();
 
-  // Build per-destino maps so we can separate recurrentes vs no-recurrentes correctly
+  // Build per-destino maps so we can separate recurrentes vs no-recurrentes correctly.
+  // A "SinExtra" twin of each is also built, excluding rows flagged Extraordinario —
+  // these feed projections only; the full map keeps feeding REAL month totals.
   const aggCobByDest = {}, aggOtrosByDest = {}, aggPagByDest = {};
-  cobRows.forEach(r=>{ if(!aggCobByDest[r.Destino]) aggCobByDest[r.Destino]={}; aggCobByDest[r.Destino][r.Mes]=(aggCobByDest[r.Destino][r.Mes]||0)+r.Subtotal; });
-  otrosRows.forEach(r=>{ const k=r.Concepto||r.Destino||'Sin concepto'; if(!aggOtrosByDest[k]) aggOtrosByDest[k]={}; aggOtrosByDest[k][r.Mes]=(aggOtrosByDest[k][r.Mes]||0)+r.Monto; });
-  pagRows.forEach(r=>{ if(!aggPagByDest[r.Destino]) aggPagByDest[r.Destino]={}; aggPagByDest[r.Destino][r.Mes]=(aggPagByDest[r.Destino][r.Mes]||0)+r.Monto; });
+  const aggCobByDestSinExtra = {}, aggOtrosByDestSinExtra = {}, aggPagByDestSinExtra = {};
+  cobRows.forEach(r=>{
+    if(!aggCobByDest[r.Destino]) aggCobByDest[r.Destino]={};
+    aggCobByDest[r.Destino][r.Mes]=(aggCobByDest[r.Destino][r.Mes]||0)+r.Subtotal;
+    if (!r.Extraordinario) {
+      if(!aggCobByDestSinExtra[r.Destino]) aggCobByDestSinExtra[r.Destino]={};
+      aggCobByDestSinExtra[r.Destino][r.Mes]=(aggCobByDestSinExtra[r.Destino][r.Mes]||0)+r.Subtotal;
+    }
+  });
+  otrosRows.forEach(r=>{
+    const k=r.Concepto||r.Destino||'Sin concepto';
+    if(!aggOtrosByDest[k]) aggOtrosByDest[k]={};
+    aggOtrosByDest[k][r.Mes]=(aggOtrosByDest[k][r.Mes]||0)+r.Monto;
+    if (!r.Extraordinario) {
+      if(!aggOtrosByDestSinExtra[k]) aggOtrosByDestSinExtra[k]={};
+      aggOtrosByDestSinExtra[k][r.Mes]=(aggOtrosByDestSinExtra[k][r.Mes]||0)+r.Monto;
+    }
+  });
+  pagRows.forEach(r=>{
+    if(!aggPagByDest[r.Destino]) aggPagByDest[r.Destino]={};
+    aggPagByDest[r.Destino][r.Mes]=(aggPagByDest[r.Destino][r.Mes]||0)+r.Monto;
+    if (!r.Extraordinario) {
+      if(!aggPagByDestSinExtra[r.Destino]) aggPagByDestSinExtra[r.Destino]={};
+      aggPagByDestSinExtra[r.Destino][r.Mes]=(aggPagByDestSinExtra[r.Destino][r.Mes]||0)+r.Monto;
+    }
+  });
 
   const cobDests   = Object.keys(aggCobByDest);
   const otrosKeys  = Object.keys(aggOtrosByDest);
@@ -798,11 +847,16 @@ function renderResumen(sec) {
 
   // Egresos by category per month — only recurring destinos go into categories
   const aggCat = {};
+  const aggCatSinExtra = {};
   pagRows.forEach(r=>{
     if (isNoRecurrente(r.Destino)) return; // excluded — handled separately below
     const cat = EG_CATS[r.Destino] || 'Otros';
     if (!aggCat[cat]) aggCat[cat]={};
     aggCat[cat][r.Mes]=(aggCat[cat][r.Mes]||0)+r.Monto;
+    if (!r.Extraordinario) {
+      if (!aggCatSinExtra[cat]) aggCatSinExtra[cat]={};
+      aggCatSinExtra[cat][r.Mes]=(aggCatSinExtra[cat][r.Mes]||0)+r.Monto;
+    }
   });
   const pagNoRecur = pagDests.filter(d=>isNoRecurrente(d));
 
@@ -821,16 +875,18 @@ function renderResumen(sec) {
   }
 
   const cobRecurAgg    = aggregateByMonth(cobRecur,   aggCobByDest);
+  const cobRecurAggSinExtra   = aggregateByMonth(cobRecur,   aggCobByDestSinExtra);
   const cobNoRecurAgg  = aggregateByMonth(cobNoRecur, aggCobByDest);
   const otrosRecurAgg  = aggregateByMonth(otrosRecur,   aggOtrosByDest);
+  const otrosRecurAggSinExtra = aggregateByMonth(otrosRecur,   aggOtrosByDestSinExtra);
   const otrosNoRecurAgg= aggregateByMonth(otrosNoRecur, aggOtrosByDest);
   const pagNoRecurAgg  = aggregateByMonth(pagNoRecur, aggPagByDest);
 
-  const getCobVal      = (col) => resolveVal(col, cobRecurAgg,     'Cobranzas');
+  const getCobVal      = (col) => resolveVal(col, cobRecurAgg,     'Cobranzas', false, cobRecurAggSinExtra);
   const getCobNoRecVal = (col) => resolveVal(col, cobNoRecurAgg,   'Ingresos No Recurrentes', true);
-  const getOIVal       = (col) => resolveVal(col, otrosRecurAgg,   'Otros Ingresos');
+  const getOIVal       = (col) => resolveVal(col, otrosRecurAgg,   'Otros Ingresos', false, otrosRecurAggSinExtra);
   const getOINoRecVal  = (col) => resolveVal(col, otrosNoRecurAgg, 'Otros Ingresos No Recurrentes', true);
-  const getCatVal      = (cat,col) => resolveVal(col, aggCat[cat]||{}, cat);
+  const getCatVal      = (cat,col) => resolveVal(col, aggCat[cat]||{}, cat, false, aggCatSinExtra[cat]||{});
   const getPagNoRecVal = (col) => resolveVal(col, pagNoRecurAgg, 'Egresos No Recurrentes', true);
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
@@ -979,10 +1035,15 @@ function renderResumen(sec) {
 // ═══════════════════════════════════════════════════════
 function renderIngresos(sec) {
   const cols = getColumns();
-  const aggByDestMes = {};
+  const aggByDestMes = {};        // ALL movements (includes extraordinarios) — used for real months
+  const aggByDestMesSinExtra = {}; // excludes movements flagged Extraordinario — feeds projections only
   cobRows.forEach(r=>{
     if (!aggByDestMes[r.Destino]) aggByDestMes[r.Destino]={};
     aggByDestMes[r.Destino][r.Mes]=(aggByDestMes[r.Destino][r.Mes]||0)+r.Subtotal;
+    if (!r.Extraordinario) {
+      if (!aggByDestMesSinExtra[r.Destino]) aggByDestMesSinExtra[r.Destino]={};
+      aggByDestMesSinExtra[r.Destino][r.Mes]=(aggByDestMesSinExtra[r.Destino][r.Mes]||0)+r.Subtotal;
+    }
   });
 
   // Group destinos into sections
@@ -1007,7 +1068,7 @@ function renderIngresos(sec) {
   const seguros       = recurDests.filter(isSeguro);
   const talleres      = recurDests.filter(d=>!isCuotaCurr(d)&&!isCuotaAnt(d)&&!isInscripcion(d)&&!isIngles(d)&&!isMaterial(d)&&!isSeguro(d));
 
-  const valForCol = (d, col) => resolveVal(col, aggByDestMes[d] || {}, d);
+  const valForCol = (d, col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
 
   const renderSection = (label, dests, opts) => {
     if (!dests.length) return '';
@@ -1058,9 +1119,14 @@ function renderIngresos(sec) {
 function renderEgresos(sec) {
   const cols = getColumns();
   const aggByDestMes = {};
+  const aggByDestMesSinExtra = {};
   pagRows.forEach(r=>{
     if (!aggByDestMes[r.Destino]) aggByDestMes[r.Destino]={};
     aggByDestMes[r.Destino][r.Mes]=(aggByDestMes[r.Destino][r.Mes]||0)+r.Monto;
+    if (!r.Extraordinario) {
+      if (!aggByDestMesSinExtra[r.Destino]) aggByDestMesSinExtra[r.Destino]={};
+      aggByDestMesSinExtra[r.Destino][r.Mes]=(aggByDestMesSinExtra[r.Destino][r.Mes]||0)+r.Monto;
+    }
   });
 
   const allDests      = Object.keys(aggByDestMes);
@@ -1074,7 +1140,7 @@ function renderEgresos(sec) {
     byCategory[cat].push(d);
   });
 
-  const getDestVal = (d,col) => resolveVal(col, aggByDestMes[d] || {}, d);
+  const getDestVal = (d,col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
@@ -1127,17 +1193,22 @@ function renderEgresos(sec) {
 function renderOtros(sec) {
   const cols = getColumns();
   const aggByConc = {};
+  const aggByConcSinExtra = {};
   otrosRows.forEach(r=>{
     const k = r.Concepto||r.Destino||'Sin concepto';
     if (!aggByConc[k]) aggByConc[k]={};
     aggByConc[k][r.Mes]=(aggByConc[k][r.Mes]||0)+r.Monto;
+    if (!r.Extraordinario) {
+      if (!aggByConcSinExtra[k]) aggByConcSinExtra[k]={};
+      aggByConcSinExtra[k][r.Mes]=(aggByConcSinExtra[k][r.Mes]||0)+r.Monto;
+    }
   });
 
   const allKeys     = Object.keys(aggByConc).sort();
   const recurKeys   = allKeys.filter(k => !isNoRecurrente(k));
   const noRecurKeys = allKeys.filter(k => isNoRecurrente(k));
 
-  const valForCol = (k,c) => resolveVal(c, aggByConc[k] || {}, k);
+  const valForCol = (k,c) => resolveVal(c, aggByConc[k] || {}, k, false, aggByConcSinExtra[k] || {});
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
   html += `<tr class="section-header"><td colspan="${cols.length+1}">OTROS INGRESOS</td></tr>`;
