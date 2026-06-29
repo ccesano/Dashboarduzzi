@@ -693,7 +693,10 @@ function baseValForSeries(aggByMes) {
   // regardless of method. This is the rule: no recent activity → no projection.
   const hasAnyDataInWindow = windowMeses.some(m => (aggByMes[m] || 0) > 0);
   if (window._dbgFlag) {
-    console.log('[baseValForSeries] windowMeses=', windowMeses.join(','), '| values=', windowMeses.map(m=>m+'='+(aggByMes[m]||0)).join(', '), '| hasAnyDataInWindow=', hasAnyDataInWindow, '| nMeses=', nMeses, '| method=', method);
+    console.log('[baseValForSeries] windowMeses=', JSON.stringify(windowMeses));
+    console.log('[baseValForSeries] aggByMes keys=', JSON.stringify(Object.keys(aggByMes)));
+    console.log('[baseValForSeries] per-month check:', windowMeses.map(m => `"${m}" in aggByMes? ${m in aggByMes} | aggByMes["${m}"]=${aggByMes[m]} | typeof aggByMes["${m}"]=${typeof aggByMes[m]}`).join(' || '));
+    console.log('[baseValForSeries] hasAnyDataInWindow=', hasAnyDataInWindow, '| nMeses=', nMeses, '| method=', method);
   }
   if (!hasAnyDataInWindow) return 0;
 
