@@ -689,20 +689,30 @@ function baseValForSeries(aggByMes) {
   const windowMeses = completeMeses.slice(-nMeses);
   const lastM = completeMeses[completeMeses.length-1];
 
+  // If there's NO real movement anywhere in the window, never project (return 0) —
+  // regardless of method. This is the rule: no recent activity → no projection.
+  const hasAnyDataInWindow = windowMeses.some(m => (aggByMes[m] || 0) > 0);
+  if (!hasAnyDataInWindow) return 0;
+
   if (method === 'last') {
     // "Último mes completo" — always the single most recent COMPLETE month
     return aggByMes[lastM] || 0;
   } else if (method === 'trend') {
-    const vals = windowMeses.map(m => aggByMes[m] || 0).filter(v => v > 0);
-    if (vals.length < 2) return vals[0] || 0;
-    const n = vals.length;
-    const sumX = n*(n-1)/2, sumY = vals.reduce((s,v)=>s+v,0);
-    const sumXY = vals.reduce((s,v,i)=>s+i*v,0);
-    const sumX2 = vals.reduce((s,_,i)=>s+i*i,0);
-    const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
-    return Math.max(0, vals[vals.length-1] + slope);
+    // IMPORTANT: keep each value at its REAL position within the window (don't
+    // compress by filtering zeros first — that breaks the x-axis for the regression
+    // and silently distorts the slope whenever there are gap months in between).
+    const valsWithGaps = windowMeses.map(m => aggByMes[m] || 0);
+    const n = valsWithGaps.length;
+    const sumX = n*(n-1)/2, sumY = valsWithGaps.reduce((s,v)=>s+v,0);
+    const sumXY = valsWithGaps.reduce((s,v,i)=>s+i*v,0);
+    const sumX2 = valsWithGaps.reduce((s,_,i)=>s+i*i,0);
+    const denom = (n*sumX2 - sumX*sumX);
+    const slope = denom !== 0 ? (n*sumXY - sumX*sumY) / denom : 0;
+    const intercept = (sumY - slope*sumX) / n;
+    // Project forward to the position right after the window (index n)
+    return Math.max(0, intercept + slope*n);
   } else {
-    // avg — over the selected N-month window
+    // avg — over the selected N-month window (average over months WITH movement only)
     const vals = windowMeses.map(m => aggByMes[m] || 0);
     return vals.reduce((s,v)=>s+v,0) / Math.max(vals.filter(v=>v>0).length,1);
   }
@@ -1165,22 +1175,7 @@ function renderEgresos(sec) {
     byCategory[cat].push(d);
   });
 
-  const DEBUG_DESTS = ['DIFERENCIA DE CUOTAS'];
-  let _debugDone = false;
-  const getDestVal = (d,col) => {
-    const v = resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
-    if (!_debugDone && DEBUG_DESTS.some(dd => d.toUpperCase().includes(dd))) {
-      _debugDone = true;
-      console.log('[DEBUG FULL] destino=', d);
-      console.log('[DEBUG FULL] aggByDestMes[d] FULL =', JSON.stringify(aggByDestMes[d]));
-      console.log('[DEBUG FULL] aggByDestMesSinExtra[d] FULL =', JSON.stringify(aggByDestMesSinExtra[d]));
-      console.log('[DEBUG FULL] completeMeses =', JSON.stringify(completeMeses));
-      console.log('[DEBUG FULL] nMesesBaseSelect value =', document.getElementById('nMesesBaseSelect')?.value);
-      console.log('[DEBUG FULL] methodSelect value =', document.getElementById('methodSelect')?.value);
-      console.log('[DEBUG FULL] curMes =', curMes);
-    }
-    return v;
-  };
+  const getDestVal = (d,col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
