@@ -797,6 +797,10 @@ function buildDashboard() {
       <div class="filter-chip"><label>Cond. Pago</label><select id="fCond" onchange="applyFilters('cond')"><option value="all">Todas</option></select></div>
       <div class="filter-chip"><label>Desde</label><input type="date" id="fDesde" onchange="applyFilters('fecha')"></div>
       <div class="filter-chip"><label>Hasta</label><input type="date" id="fHasta" onchange="applyFilters('fecha')"></div>
+      <div class="filter-chip" style="cursor:pointer;" onclick="toggleSoloExtra()" id="chipSoloExtra">
+        <label style="cursor:pointer;">⚡ Extraordinarios</label>
+        <span id="soloExtraState" style="color:var(--muted2);">Todos</span>
+      </div>
       <div class="filter-spacer"></div>
       <button class="clear-btn" onclick="clearFilters()">✕ Limpiar</button>
     </div>
@@ -994,12 +998,16 @@ function applyFilters(changedFilter) {
   }
 
   // ── STEP 9: final filtered rows ──
-  filtRows = rowsAfterDest.filter(r =>
+  let rowsAfterCond = rowsAfterDest.filter(r =>
     cond === 'all' || r.CondicionVenta === condVal
   );
 
+  // STEP 10: Solo Extraordinarios (independent toggle)
+  if (soloExtraordinarios) rowsAfterCond = rowsAfterCond.filter(r => r.Extraordinario);
+  filtRows = rowsAfterCond;
+
   document.getElementById('txCount').textContent =
-    filtRows.length.toLocaleString('es-AR') + ' transacciones';
+    filtRows.length.toLocaleString('es-AR') + ' transacciones' + (soloExtraordinarios ? ' ⚡' : '');
 
   updateKPIs();
   updateCompare();
@@ -1008,6 +1016,22 @@ function applyFilters(changedFilter) {
   page = 1;
   renderTable();
   renderEmpleadas();
+}
+
+let soloExtraordinarios = false;
+function toggleSoloExtra() {
+  soloExtraordinarios = !soloExtraordinarios;
+  const chip  = document.getElementById('chipSoloExtra');
+  const state = document.getElementById('soloExtraState');
+  if (soloExtraordinarios) {
+    chip.style.background = 'rgba(232,197,71,.12)';
+    chip.style.borderColor = 'rgba(232,197,71,.4)';
+    state.textContent = 'Solo estos'; state.style.color = 'var(--accent)';
+  } else {
+    chip.style.background = ''; chip.style.borderColor = '';
+    state.textContent = 'Todos'; state.style.color = 'var(--muted2)';
+  }
+  applyFilters();
 }
 
 function clearFilters() {
@@ -1019,6 +1043,11 @@ function clearFilters() {
   const dias = allRows.map(r => r.Dia).sort();
   document.getElementById('fDesde').value = dias[0];
   document.getElementById('fHasta').value = dias[dias.length-1];
+  soloExtraordinarios = false;
+  document.getElementById('chipSoloExtra').style.background = '';
+  document.getElementById('chipSoloExtra').style.borderColor = '';
+  document.getElementById('soloExtraState').textContent = 'Todos';
+  document.getElementById('soloExtraState').style.color = 'var(--muted2)';
   applyFilters();
 }
 
@@ -1327,7 +1356,7 @@ function renderTable() {
   body.innerHTML = sl.length ? sl.map(r => {
     const sc = 'suc-'+r.Sucursal.toLowerCase().replace('ñ','n').replace('é','e');
     const marcado = r.Extraordinario;
-    return `<tr>
+    return `<tr${marcado?' style="background:rgba(232,197,71,.06);"':''}>
       <td class="mono">${fmtDate(r.Dia)}</td>
       <td><span class="suc-badge ${sc}">${SUC_NAMES[r.Sucursal]||r.Sucursal}</span></td>
       <td><span class="cond-badge">${COND_NAMES[r.CondicionVenta]||r.CondicionVenta}</span></td>

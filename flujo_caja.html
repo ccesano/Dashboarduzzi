@@ -793,10 +793,25 @@ function makeHeaderRow() {
 }
 
 // ── Value cell helper ────────────────────────────
-function valCell(v, isProj, cls='') {
+// Returns the extraordinario amount included in a REAL month's total for a given
+// destino — i.e. the difference between the full total and the "sin extra" total.
+// Returns 0 for projected columns (the concept doesn't apply there).
+function extraMontoForCol(col, aggByMes, aggByMesSinExtra) {
+  if (col.isProj || col.isCurrentProj) return 0;
+  const full    = (aggByMes||{})[col.mes] || 0;
+  const sinExtra= (aggByMesSinExtra||{})[col.mes] || 0;
+  return Math.max(0, full - sinExtra);
+}
+
+function valCell(v, isProj, cls='', extraMonto) {
   const projClass = isProj ? ' proj proj-val' : '';
   const color = cls==='pos'?'val-pos':cls==='neg'?'val-neg':cls==='egr'?'val-neg':'val-neu';
-  return `<td class="pv${projClass} ${color}">${v===0?'—':fmt(v)}</td>`;
+  // extraMonto > 0 means this REAL cell includes punctual (extraordinario) movements
+  // that were excluded from the projection base — shown as a tiny ⚡ with a tooltip.
+  const extraMark = (!isProj && extraMonto > 0)
+    ? `<span title="Incluye ${fmt(extraMonto)} en movimiento(s) puntual(es) — no usado para proyectar" style="cursor:help;color:var(--accent);font-size:9px;vertical-align:super;margin-left:2px;">⚡</span>`
+    : '';
+  return `<td class="pv${projClass} ${color}">${v===0?'—':fmt(v)}${extraMark}</td>`;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -891,29 +906,34 @@ function renderResumen(sec) {
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
+  const extraCob = (c) => extraMontoForCol(c, cobRecurAgg, cobRecurAggSinExtra);
+  const extraOI  = (c) => extraMontoForCol(c, otrosRecurAgg, otrosRecurAggSinExtra);
+  const extraCat = (cat,c) => extraMontoForCol(c, aggCat[cat], aggCatSinExtra[cat]);
+
   // INGRESOS section
   html += `<tr class="section-header"><td colspan="${cols.length+1}">INGRESOS</td></tr>`;
-  html += `<tr class="data-row"><td>Cobranzas</td>${cols.map(c=>valCell(getCobVal(c),c.isProj,'pos')).join('')}</tr>`;
-  html += `<tr class="data-row"><td>Otros Ingresos</td>${cols.map(c=>valCell(getOIVal(c),c.isProj,'pos')).join('')}</tr>`;
+  html += `<tr class="data-row"><td>Cobranzas</td>${cols.map(c=>valCell(getCobVal(c),c.isProj,'pos',extraCob(c))).join('')}</tr>`;
+  html += `<tr class="data-row"><td>Otros Ingresos</td>${cols.map(c=>valCell(getOIVal(c),c.isProj,'pos',extraOI(c))).join('')}</tr>`;
   if (cobNoRecur.length || otrosNoRecur.length) {
     html += `<tr class="data-row"><td>⚠️ Ingresos No Recurrentes <span style="font-size:9px;color:var(--muted2);">puntual</span></td>${cols.map(c=>valCell(getCobNoRecVal(c)+getOINoRecVal(c),c.isProj,'pos')).join('')}</tr>`;
   }
   html += `<tr class="total-row"><td>TOTAL INGRESOS</td>${cols.map(c=>{
     const v=getCobVal(c)+getOIVal(c)+getCobNoRecVal(c)+getOINoRecVal(c);
-    return valCell(v,c.isProj,'pos');
+    return valCell(v,c.isProj,'pos', extraCob(c)+extraOI(c));
   }).join('')}</tr>`;
 
   // EGRESOS section
   html += `<tr class="section-header"><td colspan="${cols.length+1}">EGRESOS OPERATIVOS</td></tr>`;
   CAT_ORDER.forEach(cat=>{
-    html += `<tr class="data-row"><td>${cat}</td>${cols.map(c=>valCell(getCatVal(cat,c),c.isProj,'egr')).join('')}</tr>`;
+    html += `<tr class="data-row"><td>${cat}</td>${cols.map(c=>valCell(getCatVal(cat,c),c.isProj,'egr',extraCat(cat,c))).join('')}</tr>`;
   });
   if (pagNoRecur.length) {
     html += `<tr class="data-row"><td>⚠️ Egresos No Recurrentes <span style="font-size:9px;color:var(--muted2);">puntual</span></td>${cols.map(c=>valCell(getPagNoRecVal(c),c.isProj,'egr')).join('')}</tr>`;
   }
   html += `<tr class="total-row"><td>TOTAL EGRESOS</td>${cols.map(c=>{
     const v=CAT_ORDER.reduce((s,cat)=>s+getCatVal(cat,c),0)+getPagNoRecVal(c);
-    return valCell(v,c.isProj,'egr');
+    const extra=CAT_ORDER.reduce((s,cat)=>s+extraCat(cat,c),0);
+    return valCell(v,c.isProj,'egr', extra);
   }).join('')}</tr>`;
 
   // MANUAL ADJUSTMENTS rows — editable in-line per month, per concept
@@ -1076,14 +1096,15 @@ function renderIngresos(sec) {
     let html = `<tr class="section-header"><td colspan="${cols.length+1}">${label}</td></tr>`;
     dests.forEach(d=>{
       html += `<tr class="data-row"><td title="${d}">${d}${opts.tag?` <span style="font-size:9px;color:var(--muted2);">${opts.tag}</span>`:''}</td>
-        ${cols.map(c => valCell(valForCol(d,c), c.isProj, 'pos')).join('')}
+        ${cols.map(c => valCell(valForCol(d,c), c.isProj, 'pos', extraMontoForCol(c, aggByDestMes[d], aggByDestMesSinExtra[d]))).join('')}
       </tr>`;
     });
     // Subtotal
     html += `<tr class="total-row"><td>Subtotal ${label}</td>
       ${cols.map(c => {
         const v = dests.reduce((s,d)=>s+valForCol(d,c), 0);
-        return valCell(v, c.isProj, 'pos');
+        const extra = dests.reduce((s,d)=>s+extraMontoForCol(c, aggByDestMes[d], aggByDestMesSinExtra[d]), 0);
+        return valCell(v, c.isProj, 'pos', extra);
       }).join('')}
     </tr>`;
     return html;
@@ -1106,7 +1127,11 @@ function renderIngresos(sec) {
   // TOTAL INGRESOS (includes everything, recurring + non-recurring + any manual adjustment for non-recurring months)
   html += `<tr class="neto-row"><td>TOTAL INGRESOS</td>${cols.map(c=>{
     const v = allDests.reduce((s,d)=>s+valForCol(d,c), 0);
-    return `<td class="pv${c.isProj?' proj proj-val':''}" style="color:var(--green);font-weight:700;">${fmt(v)}</td>`;
+    const extra = allDests.reduce((s,d)=>s+extraMontoForCol(c, aggByDestMes[d], aggByDestMesSinExtra[d]), 0);
+    const mark = (!c.isProj && extra > 0)
+      ? `<span title="Incluye ${fmt(extra)} en movimiento(s) puntual(es) — no usado para proyectar" style="cursor:help;color:var(--accent);font-size:9px;vertical-align:super;margin-left:2px;">⚡</span>`
+      : '';
+    return `<td class="pv${c.isProj?' proj proj-val':''}" style="color:var(--green);font-weight:700;">${fmt(v)}${mark}</td>`;
   }).join('')}</tr>`;
 
   html += `</tbody></table></div>`;
@@ -1144,19 +1169,22 @@ function renderEgresos(sec) {
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
+  const extraForDest = (d, c) => extraMontoForCol(c, aggByDestMes[d], aggByDestMesSinExtra[d]);
+
   CAT_ORDER.forEach(cat=>{
     const dests = (byCategory[cat]||[]).sort();
     if (!dests.length) return;
     html += `<tr class="section-header"><td colspan="${cols.length+1}">${cat.toUpperCase()}</td></tr>`;
     dests.forEach(d=>{
       html += `<tr class="data-row"><td title="${d}">${d.replace(' (UZZI)','')}</td>
-        ${cols.map(c=>valCell(getDestVal(d,c),c.isProj,'egr')).join('')}
+        ${cols.map(c=>valCell(getDestVal(d,c),c.isProj,'egr', extraForDest(d,c))).join('')}
       </tr>`;
     });
     html += `<tr class="total-row"><td>Subtotal ${cat}</td>
       ${cols.map(c=>{
         const v=dests.reduce((s,d)=>s+getDestVal(d,c),0);
-        return valCell(v,c.isProj,'egr');
+        const extra=dests.reduce((s,d)=>s+extraForDest(d,c),0);
+        return valCell(v,c.isProj,'egr', extra);
       }).join('')}
     </tr>`;
   });
@@ -1180,7 +1208,11 @@ function renderEgresos(sec) {
   // Total
   html += `<tr class="neto-row"><td>TOTAL EGRESOS</td>${cols.map(c=>{
     const v=allDests.reduce((s,d)=>s+getDestVal(d,c),0);
-    return `<td class="pv${c.isProj?' proj proj-val':''}" style="color:var(--red);font-weight:700;">${fmt(v)}</td>`;
+    const extra=allDests.reduce((s,d)=>s+extraForDest(d,c),0);
+    const mark = (!c.isProj && extra > 0)
+      ? `<span title="Incluye ${fmt(extra)} en movimiento(s) puntual(es) — no usado para proyectar" style="cursor:help;color:var(--accent);font-size:9px;vertical-align:super;margin-left:2px;">⚡</span>`
+      : '';
+    return `<td class="pv${c.isProj?' proj proj-val':''}" style="color:var(--red);font-weight:700;">${fmt(v)}${mark}</td>`;
   }).join('')}</tr>`;
 
   html += `</tbody></table></div>`;

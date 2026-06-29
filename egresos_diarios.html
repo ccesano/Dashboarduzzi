@@ -487,6 +487,10 @@ function buildDashboard(){
       <div class="filter-chip"><label>Destino</label><select id="fDest" onchange="applyFilters('dest')" style="max-width:200px;"><option value="all">Todos</option></select></div>
       <div class="filter-chip"><label>Desde</label><input type="date" id="fDesde" onchange="applyFilters('fecha')"></div>
       <div class="filter-chip"><label>Hasta</label><input type="date" id="fHasta" onchange="applyFilters('fecha')"></div>
+      <div class="filter-chip" style="cursor:pointer;" onclick="toggleSoloExtra()" id="chipSoloExtra">
+        <label style="cursor:pointer;">⚡ Extraordinarios</label>
+        <span id="soloExtraState" style="color:var(--muted2);">Todos</span>
+      </div>
       <div class="filter-spacer"></div>
       <button class="clear-btn" onclick="clearFilters()">✕ Limpiar</button>
     </div>
@@ -648,10 +652,31 @@ function applyFilters(changedFilter) {
   if (dest !== 'all' && !availDests.includes(dv)) { document.getElementById('fDest').value='all'; dest='all'; }
 
   // Step 4: Destino → final
-  filtRows = r3.filter(r => dest === 'all' || r.Destino === dv);
+  let r4 = r3.filter(r => dest === 'all' || r.Destino === dv);
 
-  document.getElementById('txCount').textContent = filtRows.length.toLocaleString('es-AR') + ' pagos';
+  // Step 5: Solo Extraordinarios (independent toggle, doesn't reset other filters)
+  if (soloExtraordinarios) r4 = r4.filter(r => r.Extraordinario);
+  filtRows = r4;
+
+  document.getElementById('txCount').textContent = filtRows.length.toLocaleString('es-AR') + ' pagos'
+    + (soloExtraordinarios ? ' ⚡' : '');
   updateKPIs(); updateBarChart(); updateDestGrid(); page=1; renderTable(); renderDestRank();
+}
+
+let soloExtraordinarios = false;
+function toggleSoloExtra() {
+  soloExtraordinarios = !soloExtraordinarios;
+  const chip  = document.getElementById('chipSoloExtra');
+  const state = document.getElementById('soloExtraState');
+  if (soloExtraordinarios) {
+    chip.style.background = 'rgba(232,197,71,.12)';
+    chip.style.borderColor = 'rgba(232,197,71,.4)';
+    state.textContent = 'Solo estos'; state.style.color = 'var(--accent)';
+  } else {
+    chip.style.background = ''; chip.style.borderColor = '';
+    state.textContent = 'Todos'; state.style.color = 'var(--muted2)';
+  }
+  applyFilters();
 }
 
 function clearFilters() {
@@ -659,6 +684,11 @@ function clearFilters() {
   const dias = allRows.map(r=>r.Dia).sort();
   document.getElementById('fDesde').value = dias[0];
   document.getElementById('fHasta').value = dias[dias.length-1];
+  soloExtraordinarios = false;
+  document.getElementById('chipSoloExtra').style.background = '';
+  document.getElementById('chipSoloExtra').style.borderColor = '';
+  document.getElementById('soloExtraState').textContent = 'Todos';
+  document.getElementById('soloExtraState').style.color = 'var(--muted2)';
   applyFilters();
 }
 
@@ -824,7 +854,7 @@ function renderTable(){
   body.innerHTML=sl.length?sl.map(r=>{
     const sc='suc-'+r.Sucursal.toLowerCase().replace('ñ','n').replace('é','e').replace('España','espana').replace('españa','espana');
     const marcado = r.Extraordinario;
-    return`<tr>
+    return`<tr${marcado?' style="background:rgba(232,197,71,.06);"':''}>
       <td class="mono">${fmtDate(r.Dia)}</td>
       <td><span class="suc-badge ${sc}">${SUC_NAMES[r.Sucursal]||r.Sucursal}</span></td>
       <td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;">${r.Destino}</td>
