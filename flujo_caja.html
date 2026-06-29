@@ -1165,7 +1165,14 @@ function renderEgresos(sec) {
     byCategory[cat].push(d);
   });
 
-  const getDestVal = (d,col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
+  const DEBUG_DESTS = ['BECADOS','BIENES DE USO','COMISIONES TARJETAS DE CREDITO','DIFERENCIA DE CUOTAS'];
+  const getDestVal = (d,col) => {
+    const v = resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
+    if (DEBUG_DESTS.some(dd => d.toUpperCase().includes(dd))) {
+      console.log('[DEBUG]', d, '| col.mes=', col.mes, '| isProj=', col.isProj, '| aggByDestMes[d]=', aggByDestMes[d], '| aggByDestMesSinExtra[d]=', aggByDestMesSinExtra[d], '| result=', v, '| isNoRecurrente=', isNoRecurrente(d));
+    }
+    return v;
+  };
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
