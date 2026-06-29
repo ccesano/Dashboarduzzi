@@ -682,7 +682,6 @@ function renderChart2(realMeses) {
 
 // Shared helper: compute projection base value for ANY series (by month map),
 // respecting the globally selected method (avg/last/trend)
-let _baseValDebugCount = 0;
 function baseValForSeries(aggByMes) {
   const method = document.getElementById('methodSelect')?.value || 'avg';
   const nMeses  = parseInt(document.getElementById('nMesesBaseSelect')?.value) || 6;
@@ -693,9 +692,8 @@ function baseValForSeries(aggByMes) {
   // If there's NO real movement anywhere in the window, never project (return 0) —
   // regardless of method. This is the rule: no recent activity → no projection.
   const hasAnyDataInWindow = windowMeses.some(m => (aggByMes[m] || 0) > 0);
-  if (_baseValDebugCount < 30) {
-    _baseValDebugCount++;
-    console.log('[baseValForSeries]', {method, nMeses, windowMeses, aggByMes: JSON.stringify(aggByMes), hasAnyDataInWindow});
+  if (window._dbgFlag) {
+    console.log('[baseValForSeries] windowMeses=', windowMeses.join(','), '| values=', windowMeses.map(m=>m+'='+(aggByMes[m]||0)).join(', '), '| hasAnyDataInWindow=', hasAnyDataInWindow, '| nMeses=', nMeses, '| method=', method);
   }
   if (!hasAnyDataInWindow) return 0;
 
@@ -1183,13 +1181,13 @@ function renderEgresos(sec) {
   const DEBUG_SET = ['GASTOS VARIOS','INSTALACIONES','MUEBLES','PAGOS ANTERIORES','PRESTAMOS','PAGOS EDUC'];
   const _debugSeen = new Set();
   const getDestVal = (d,col) => {
+    const shouldDebug = col.isProj && DEBUG_SET.some(dd => d.toUpperCase().includes(dd)) && !_debugSeen.has(d);
+    if (shouldDebug) { _debugSeen.add(d); window._dbgFlag = true; }
     const v = resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
-    const key = d + '|' + col.mes + '|' + col.isProj;
-    if (col.isProj && DEBUG_SET.some(dd => d.toUpperCase().includes(dd)) && !_debugSeen.has(d)) {
-      _debugSeen.add(d);
-      console.log('=== DEBUG', d, '===');
-      console.log('  aggByDestMes[d] =', JSON.stringify(aggByDestMes[d]));
-      console.log('  result for', col.mes, '(isProj=true) =', v);
+    if (shouldDebug) {
+      window._dbgFlag = false;
+      console.log('=== DEBUG', d, '=== result for', col.mes, '=', v);
+      console.log('  Real months with data:', Object.entries(aggByDestMes[d]||{}).filter(([m,v])=>v>0).map(([m,v])=>m+'='+v).join(', '));
     }
     return v;
   };
