@@ -1182,12 +1182,12 @@ function renderEgresos(sec) {
   const _debugSeen = new Set();
   const getDestVal = (d,col) => {
     const shouldDebug = col.isProj && DEBUG_SET.some(dd => d.toUpperCase().includes(dd)) && !_debugSeen.has(d);
-    if (shouldDebug) { _debugSeen.add(d); window._dbgFlag = true; }
+    if (shouldDebug) { _debugSeen.add(d); }
     const v = resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
     if (shouldDebug) {
-      window._dbgFlag = false;
       console.log('=== DEBUG', d, '=== result for', col.mes, '=', v);
-      console.log('  Real months with data:', Object.entries(aggByDestMes[d]||{}).filter(([m,v])=>v>0).map(([m,v])=>m+'='+v).join(', '));
+      console.log('  aggByDestMes (FULL, incl extraordinarios):', Object.entries(aggByDestMes[d]||{}).filter(([m,v])=>v>0).map(([m,v])=>m+'='+v).join(', '));
+      console.log('  aggByDestMesSinExtra (used for projection):', Object.entries(aggByDestMesSinExtra[d]||{}).filter(([m,v])=>v>0).map(([m,v])=>m+'='+v).join(', ') || '(EMPTY)');
     }
     return v;
   };
