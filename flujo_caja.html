@@ -1165,11 +1165,19 @@ function renderEgresos(sec) {
     byCategory[cat].push(d);
   });
 
-  const DEBUG_DESTS = ['BECADOS','BIENES DE USO','COMISIONES TARJETAS DE CREDITO','DIFERENCIA DE CUOTAS'];
+  const DEBUG_DESTS = ['DIFERENCIA DE CUOTAS'];
+  let _debugDone = false;
   const getDestVal = (d,col) => {
     const v = resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
-    if (DEBUG_DESTS.some(dd => d.toUpperCase().includes(dd))) {
-      console.log('[DEBUG]', d, '| col.mes=', col.mes, '| isProj=', col.isProj, '| aggByDestMes[d]=', aggByDestMes[d], '| aggByDestMesSinExtra[d]=', aggByDestMesSinExtra[d], '| result=', v, '| isNoRecurrente=', isNoRecurrente(d));
+    if (!_debugDone && DEBUG_DESTS.some(dd => d.toUpperCase().includes(dd))) {
+      _debugDone = true;
+      console.log('[DEBUG FULL] destino=', d);
+      console.log('[DEBUG FULL] aggByDestMes[d] FULL =', JSON.stringify(aggByDestMes[d]));
+      console.log('[DEBUG FULL] aggByDestMesSinExtra[d] FULL =', JSON.stringify(aggByDestMesSinExtra[d]));
+      console.log('[DEBUG FULL] completeMeses =', JSON.stringify(completeMeses));
+      console.log('[DEBUG FULL] nMesesBaseSelect value =', document.getElementById('nMesesBaseSelect')?.value);
+      console.log('[DEBUG FULL] methodSelect value =', document.getElementById('methodSelect')?.value);
+      console.log('[DEBUG FULL] curMes =', curMes);
     }
     return v;
   };
