@@ -90,9 +90,12 @@ module.exports = async function handler(req, res) {
       return res.status(404).json({ error: 'Movimiento no encontrado — puede que los datos hayan cambiado. Recargá la página e intentá de nuevo.' });
     }
 
-    // If the column is new, write the header label first
+    // If the column is new, the sheet's grid must be expanded BEFORE writing to it —
+    // Sheets API rejects writes outside the current grid limits (rows/cols), even though
+    // appending via values.append would auto-expand. A direct cell PUT does not.
     const colLetter = colIndexToLetter(extColIdx);
     if (isNewColumn) {
+      await ensureColumnExists(gtoken, SHEET_ID, sheetName, extColIdx + 1); // +1 = total columns needed
       await writeCell(gtoken, SHEET_ID, sheetName, colLetter, hdrIdx+1, 'Extraordinario');
     }
 
@@ -106,6 +109,40 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 };
+
+// Expands the sheet's grid to have at least `neededCols` columns, if it doesn't already.
+// Needed before writing to a column index that exceeds the sheet's current gridProperties.
+async function ensureColumnExists(token, sheetId, sheetName, neededCols) {
+  // 1. Get the sheet's numeric ID + current column count
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties`;
+  const metaResp = await fetch(metaUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (!metaResp.ok) throw new Error('Error reading spreadsheet metadata: ' + await metaResp.text());
+  const meta = await metaResp.json();
+  const sheetProps = (meta.sheets || []).find(s => s.properties?.title === sheetName)?.properties;
+  if (!sheetProps) throw new Error(`Sheet "${sheetName}" not found in spreadsheet metadata`);
+
+  const currentCols = sheetProps.gridProperties?.columnCount || 0;
+  if (currentCols >= neededCols) return; // already big enough, nothing to do
+
+  // 2. Expand via batchUpdate (updateSheetProperties)
+  const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`;
+  const batchResp = await fetch(batchUrl, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      requests: [{
+        updateSheetProperties: {
+          properties: {
+            sheetId: sheetProps.sheetId,
+            gridProperties: { columnCount: neededCols }
+          },
+          fields: 'gridProperties.columnCount'
+        }
+      }]
+    })
+  });
+  if (!batchResp.ok) throw new Error('Error expanding sheet grid: ' + await batchResp.text());
+}
 
 async function writeCell(token, sheetId, sheetName, colLetter, rowNumber1Indexed, value) {
   const range = `${sheetName}!${colLetter}${rowNumber1Indexed}`;
