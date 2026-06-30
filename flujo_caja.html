@@ -692,12 +692,6 @@ function baseValForSeries(aggByMes) {
   // If there's NO real movement anywhere in the window, never project (return 0) —
   // regardless of method. This is the rule: no recent activity → no projection.
   const hasAnyDataInWindow = windowMeses.some(m => (aggByMes[m] || 0) > 0);
-  if (window._dbgFlag) {
-    console.log('[baseValForSeries] windowMeses=', JSON.stringify(windowMeses));
-    console.log('[baseValForSeries] aggByMes keys=', JSON.stringify(Object.keys(aggByMes)));
-    console.log('[baseValForSeries] per-month check:', windowMeses.map(m => `"${m}" in aggByMes? ${m in aggByMes} | aggByMes["${m}"]=${aggByMes[m]} | typeof aggByMes["${m}"]=${typeof aggByMes[m]}`).join(' || '));
-    console.log('[baseValForSeries] hasAnyDataInWindow=', hasAnyDataInWindow, '| nMeses=', nMeses, '| method=', method);
-  }
   if (!hasAnyDataInWindow) return 0;
 
   if (method === 'last') {
@@ -1181,20 +1175,7 @@ function renderEgresos(sec) {
     byCategory[cat].push(d);
   });
 
-  const DEBUG_SET = ['GASTOS VARIOS','INSTALACIONES','MUEBLES','PAGOS ANTERIORES','PRESTAMOS','PAGOS EDUC'];
-  const _debugSeen = new Set();
-  const getDestVal = (d,col) => {
-    const shouldDebug = col.isProj && DEBUG_SET.some(dd => d.toUpperCase().includes(dd)) && !_debugSeen.has(d);
-    if (shouldDebug) { _debugSeen.add(d); window._dbgFlag = true; }
-    const v = resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
-    if (shouldDebug) {
-      window._dbgFlag = false;
-      console.log('=== DEBUG', d, '=== result for', col.mes, '=', v);
-      console.log('  aggByDestMes (FULL, incl extraordinarios):', Object.entries(aggByDestMes[d]||{}).filter(([m,v])=>v>0).map(([m,v])=>m+'='+v).join(', '));
-      console.log('  aggByDestMesSinExtra (used for projection):', Object.entries(aggByDestMesSinExtra[d]||{}).filter(([m,v])=>v>0).map(([m,v])=>m+'='+v).join(', ') || '(EMPTY)');
-    }
-    return v;
-  };
+  const getDestVal = (d,col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
