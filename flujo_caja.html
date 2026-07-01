@@ -964,7 +964,16 @@ function renderResumen(sec) {
     return `<tr class="manual-row"><td>
       ${a.desc} <span class="del-btn" onclick="deleteAdjustmentConcept('${a.id}')" title="Eliminar concepto entero">✕</span>
     </td>${cols.map(c=>{
-      if (!c.isProj && !c.isCurrentProj) return `<td class="pv">—</td>`;
+      if (!c.isProj && !c.isCurrentProj) {
+        // Completed real month: the projection we had loaded for this month is
+        // NOT editable anymore (it's the past) and does NOT feed any total
+        // (resolveAdjVal returns 0 for completed months). But we still show it,
+        // dimmed and read-only, as a reference to eyeball against the real result.
+        const pv = valores[c.mes];
+        if (!pv) return `<td class="pv">—</td>`;
+        const pvDisplay = pv.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
+        return `<td class="pv" style="color:var(--muted2);font-style:italic;font-family:'DM Mono',monospace;font-size:11px;text-align:right;" title="Proyectado que habías cargado para este mes (referencia — no afecta el resultado real)">${pvDisplay}</td>`;
+      }
       const v = valores[c.mes] || '';
       const vDisplay = v ? v.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
       return `<td class="pv proj" style="padding:4px 8px;">
