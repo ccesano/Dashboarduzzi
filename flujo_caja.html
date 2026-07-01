@@ -492,7 +492,15 @@ function buildDashboard() {
   // make sure projMeses never overlaps with it
   projMeses = projMeses.filter(m => !realMeses.includes(m));
 
-  allMeses = [...realMeses, ...projMeses];
+  // The current calendar month must ALWAYS have its own column in the table,
+  // even if no real movements have been loaded yet this month (e.g. day 1 of
+  // the month). Otherwise curMes falls into a gap between realMeses (which ends
+  // at the last month WITH data) and projMeses (which starts at curMes+1), the
+  // column is never drawn, and its manual adjustments become invisible and
+  // uneditable. We add it ONLY to the table column universe (allMeses); KPIs and
+  // chart keep using realMeses so they still summarize the last complete month.
+  const displayReales = realMeses.includes(curMes) ? realMeses : [...realMeses, curMes];
+  allMeses = [...new Set([...displayReales, ...projMeses])].sort();
 
   // Compute projected values using last 6 real months average × (1+infl%)^n
   window._projBase = computeProjBase(completeMeses, cobRows, pagRows, otrosRows, infl);
@@ -1013,7 +1021,13 @@ function renderResumen(sec) {
   // up to that column. Uses the FULL month universe (allRealMeses + projMeses), NOT just
   // the filtered 'cols' (which respects the "Mostrar" window) — otherwise hiding earlier
   // months of the year would silently drop them from the accumulator.
-  const fullMesesUniverse = [...new Set([...allRealMeses, ...projMeses])].sort();
+  // Include curMes explicitly: on day 1 of the month (before any real movement
+  // is loaded) it isn't in allRealMeses, which would make the accumulator for
+  // later projected months silently skip the current month. Adding it here is a
+  // no-op the rest of the month (Set dedupes once curMes has real data), so
+  // behavior on day 1 matches behavior mid-month. Line ~1040 already handles the
+  // mes === curMes case inside the walk.
+  const fullMesesUniverse = [...new Set([...allRealMeses, curMes, ...projMeses])].sort();
   function netoForMes(mes, wantProj) {
     // Recompute the net result for a SPECIFIC month, independent of what's visible in cols.
     // wantProj=true means "use the projected value for this month" (only meaningful for curMes/futuro).
@@ -1423,7 +1437,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const _days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
   const _ms   = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const _lbl  = document.getElementById('todayLabel');
-  if (_lbl) _lbl.textContent = _days[_now.getDay()] + ' ' + _now.getDate() + ' ' + _ms[_now.getMonth()] + ' ' + _now.getFullYear();
+  if (_lbl) _lbl.textContent = _days[_now.getDay()] + ' ' + _now.getDate() + ' ' + _ms[_now.getMonth()+1] + ' ' + _now.getFullYear();
 
   // Load data from API
   const _overlay = document.getElementById('dataLoadingOverlay');
