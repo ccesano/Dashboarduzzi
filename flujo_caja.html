@@ -661,8 +661,8 @@ function renderChart2(realMeses) {
   const pagDests = Object.keys(aggByDestPag);
 
   // Use the same per-destino resolveVal logic as the tables — respects no-recurrentes + dual current month
-  const ingData = cols.map(c => cobDests.reduce((s,d)=>s+resolveVal(c, aggByDestCob[d], d, false, aggByDestCobSinExtra[d]||{}), 0));
-  const egrData = cols.map(c => pagDests.reduce((s,d)=>s+resolveVal(c, aggByDestPag[d], d, false, aggByDestPagSinExtra[d]||{}), 0));
+  const ingData = cols.map(c => cobDests.reduce((s,d)=>s+resolveVal(c, aggByDestCob[d], d, false, aggByDestCobSinExtra[d]||{}, 'ing::'+d), 0));
+  const egrData = cols.map(c => pagDests.reduce((s,d)=>s+resolveVal(c, aggByDestPag[d], d, false, aggByDestPagSinExtra[d]||{}, 'egr::'+d), 0));
 
   const ctx = document.getElementById('flowChart')?.getContext('2d'); if (!ctx) return;
   if (chartInst) { chartInst.destroy(); chartInst=null; }
@@ -750,8 +750,17 @@ function isNoRecurrente(concepto) {
 
 // Resolve the value for a given column key for a destino-based series.
 // aggByMes: { 'YYYY-MM': number }. Handles real/proj/current-split + no-recurrente rule.
-function resolveVal(col, aggByMes, concepto, forceNoRecur, aggByMesSinExtra) {
+function resolveVal(col, aggByMes, concepto, forceNoRecur, aggByMesSinExtra, pinKey) {
   const noRecur = forceNoRecur || isNoRecurrente(concepto);
+  // PINNED VALUE: if the caller opted in with a pinKey and this projected cell has
+  // a value the user explicitly pinned, that value wins — absolute, untouched by
+  // method/window/inflation changes. Being stored data, it doubles as the frozen
+  // baseline for proyectado-vs-real comparison once the month closes. Never applies
+  // to no-recurrentes (they are not projected at all) nor to real columns.
+  if (pinKey && !noRecur && (col.isProj || col.isCurrentProj)) {
+    const _p = getPin(pinKey, col.mes);
+    if (_p !== null) return _p;
+  }
   // Use the "sin extraordinarios" series for the PROJECTION BASE when available —
   // punctual movements (Bienes Personales, estudios de marketing, cartillas, etc.)
   // still count toward the real result of their month, but never pull the average/tendencia up.
@@ -830,6 +839,28 @@ function valCell(v, isProj, cls='', extraMonto) {
     ? `<span title="Incluye ${fmt(extraMonto)} en movimiento(s) puntual(es) — no usado para proyectar" style="cursor:help;color:var(--accent);font-size:9px;vertical-align:super;margin-left:2px;">⚡</span>`
     : '';
   return `<td class="pv${projClass} ${color}">${v===0?'—':fmt(v)}${extraMark}</td>`;
+}
+
+// ── Pinnable projected cell ──────────────────────
+// For destino rows in the detail tabs: projected cells get two tiny actions —
+// 📌 pins the value the current method is showing (one click, frozen as-is),
+// ✎ opens a prompt to pin a manual value instead. Pinned cells show an accent
+// outline + 📌 and a ✕ to release back to the automatic projection.
+// Real (past / current-real) columns fall through to the normal valCell.
+function pinnableCell(v, col, pinKey, cls, extraMonto) {
+  if (!(col.isProj || col.isCurrentProj)) return valCell(v, col.isProj, cls, extraMonto);
+  const enc = encodeURIComponent(pinKey);
+  const color = cls==='pos'?'val-pos':cls==='egr'?'val-neg':'val-neu';
+  const isPinned = getPin(pinKey, col.mes) !== null;
+  if (isPinned) {
+    return `<td class="pv proj ${color}" style="outline:1px solid var(--accent);outline-offset:-2px;border-radius:4px;">`+
+      `<span title="Valor fijado — no cambia con el método, la ventana ni la inflación, y queda guardado para comparar contra el real cuando el mes cierre" style="font-size:9px;margin-right:2px;">📌</span>`+
+      `${fmt(v)}`+
+      `<span onclick="unpinValue('${enc}','${col.mes}')" title="Quitar fijado — volver a la proyección automática" style="cursor:pointer;color:var(--muted2);font-size:10px;margin-left:4px;">✕</span></td>`;
+  }
+  return `<td class="pv proj proj-val ${color}">${v===0?'—':fmt(v)}`+
+    `<span onclick="pinAsIs('${enc}','${col.mes}',${v})" title="Fijar este valor tal cual (lo que proyecta el método actual)" style="cursor:pointer;font-size:9px;opacity:.45;margin-left:4px;">📌</span>`+
+    `<span onclick="pinManual('${enc}','${col.mes}',${v})" title="Fijar un valor manual" style="cursor:pointer;font-size:9px;opacity:.45;margin-left:2px;">✎</span></td>`;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -915,11 +946,34 @@ function renderResumen(sec) {
   const otrosNoRecurAgg= aggregateByMonth(otrosNoRecur, aggOtrosByDest);
   const pagNoRecurAgg  = aggregateByMonth(pagNoRecur, aggPagByDest);
 
-  const getCobVal      = (col) => resolveVal(col, cobRecurAgg,     'Cobranzas', false, cobRecurAggSinExtra);
+  // ── PIN RECONCILIATION ──────────────────────────────────────────────
+  // The Resumen projects on AGGREGATE series (see aggregateByMonth comment above),
+  // so a per-destino pinned value can't flow through resolveVal here like it does
+  // in the detail tabs. We reconcile by adding, per projected month, the difference
+  // between each pinned value and what the system would have auto-projected for
+  // that destino — keeping Resumen, detail tabs, chart, TOTALS, SALDO NETO and the
+  // annual accumulator all telling the same story.
+  const pagRecurDests = pagDests.filter(d=>!isNoRecurrente(d));
+  function pinDelta(col, dests, byDest, byDestSinExtra, prefix){
+    if (!(col.isProj || col.isCurrentProj)) return 0;
+    let delta = 0;
+    dests.forEach(d=>{
+      const p = getPin(prefix+d, col.mes);
+      if (p === null) return;
+      const auto = resolveVal(col, byDest[d]||{}, d, false, (byDestSinExtra&&byDestSinExtra[d])||{});
+      delta += p - auto;
+    });
+    return delta;
+  }
+
+  const getCobVal      = (col) => resolveVal(col, cobRecurAgg,     'Cobranzas', false, cobRecurAggSinExtra)
+                                  + pinDelta(col, cobRecur, aggCobByDest, aggCobByDestSinExtra, 'ing::');
   const getCobNoRecVal = (col) => resolveVal(col, cobNoRecurAgg,   'Ingresos No Recurrentes', true);
-  const getOIVal       = (col) => resolveVal(col, otrosRecurAgg,   'Otros Ingresos', false, otrosRecurAggSinExtra);
+  const getOIVal       = (col) => resolveVal(col, otrosRecurAgg,   'Otros Ingresos', false, otrosRecurAggSinExtra)
+                                  + pinDelta(col, otrosRecur, aggOtrosByDest, aggOtrosByDestSinExtra, 'otr::');
   const getOINoRecVal  = (col) => resolveVal(col, otrosNoRecurAgg, 'Otros Ingresos No Recurrentes', true);
-  const getCatVal      = (cat,col) => resolveVal(col, aggCat[cat]||{}, cat, false, aggCatSinExtra[cat]||{});
+  const getCatVal      = (cat,col) => resolveVal(col, aggCat[cat]||{}, cat, false, aggCatSinExtra[cat]||{})
+                                  + pinDelta(col, pagRecurDests.filter(d=>(EG_CATS[d]||'Otros')===cat), aggPagByDest, aggPagByDestSinExtra, 'egr::');
   const getPagNoRecVal = (col) => resolveVal(col, pagNoRecurAgg, 'Egresos No Recurrentes', true);
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
@@ -965,6 +1019,9 @@ function renderResumen(sec) {
       ${a.desc} <span class="del-btn" onclick="deleteAdjustmentConcept('${a.id}')" title="Eliminar concepto entero">✕</span>
     </td>${cols.map(c=>{
       if (!c.isProj && !c.isCurrentProj) {
+        // Current month's REAL half: show nothing — the projected amount for this
+        // month is already visible/editable right next door in the (proy.)★ column.
+        if (c.isCurrentReal) return `<td class="pv">—</td>`;
         // Completed real month: the projection we had loaded for this month is
         // NOT editable anymore (it's the past) and does NOT feed any total
         // (resolveAdjVal returns 0 for completed months). But we still show it,
@@ -1121,7 +1178,7 @@ function renderIngresos(sec) {
   const seguros       = recurDests.filter(isSeguro);
   const talleres      = recurDests.filter(d=>!isCuotaCurr(d)&&!isCuotaAnt(d)&&!isInscripcion(d)&&!isIngles(d)&&!isMaterial(d)&&!isSeguro(d));
 
-  const valForCol = (d, col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
+  const valForCol = (d, col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {}, 'ing::'+d);
 
   const renderSection = (label, dests, opts) => {
     if (!dests.length) return '';
@@ -1129,7 +1186,7 @@ function renderIngresos(sec) {
     let html = `<tr class="section-header"><td colspan="${cols.length+1}">${label}</td></tr>`;
     dests.forEach(d=>{
       html += `<tr class="data-row"><td title="${d}">${d}${opts.tag?` <span style="font-size:9px;color:var(--muted2);">${opts.tag}</span>`:''}</td>
-        ${cols.map(c => valCell(valForCol(d,c), c.isProj, 'pos', extraMontoForCol(c, aggByDestMes[d], aggByDestMesSinExtra[d]))).join('')}
+        ${cols.map(c => pinnableCell(valForCol(d,c), c, 'ing::'+d, 'pos', extraMontoForCol(c, aggByDestMes[d], aggByDestMesSinExtra[d]))).join('')}
       </tr>`;
     });
     // Subtotal
@@ -1198,7 +1255,7 @@ function renderEgresos(sec) {
     byCategory[cat].push(d);
   });
 
-  const getDestVal = (d,col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {});
+  const getDestVal = (d,col) => resolveVal(col, aggByDestMes[d] || {}, d, false, aggByDestMesSinExtra[d] || {}, 'egr::'+d);
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
 
@@ -1210,7 +1267,7 @@ function renderEgresos(sec) {
     html += `<tr class="section-header"><td colspan="${cols.length+1}">${cat.toUpperCase()}</td></tr>`;
     dests.forEach(d=>{
       html += `<tr class="data-row"><td title="${d}">${d.replace(' (UZZI)','')}</td>
-        ${cols.map(c=>valCell(getDestVal(d,c),c.isProj,'egr', extraForDest(d,c))).join('')}
+        ${cols.map(c=>pinnableCell(getDestVal(d,c),c,'egr::'+d,'egr', extraForDest(d,c))).join('')}
       </tr>`;
     });
     html += `<tr class="total-row"><td>Subtotal ${cat}</td>
@@ -1273,14 +1330,14 @@ function renderOtros(sec) {
   const recurKeys   = allKeys.filter(k => !isNoRecurrente(k));
   const noRecurKeys = allKeys.filter(k => isNoRecurrente(k));
 
-  const valForCol = (k,c) => resolveVal(c, aggByConc[k] || {}, k, false, aggByConcSinExtra[k] || {});
+  const valForCol = (k,c) => resolveVal(c, aggByConc[k] || {}, k, false, aggByConcSinExtra[k] || {}, 'otr::'+k);
 
   let html = `<div class="table-outer"><table>${makeHeaderRow()}<tbody>`;
   html += `<tr class="section-header"><td colspan="${cols.length+1}">OTROS INGRESOS</td></tr>`;
 
   recurKeys.forEach(k=>{
     html += `<tr class="data-row"><td title="${k}">${k}</td>
-      ${cols.map(c=>valCell(valForCol(k,c),c.isProj,'pos')).join('')}
+      ${cols.map(c=>pinnableCell(valForCol(k,c),c,'otr::'+k,'pos')).join('')}
     </tr>`;
   });
 
@@ -1347,6 +1404,81 @@ function exportExcel() {
 // MANUAL ADJUSTMENTS
 // ═══════════════════════════════════════════════════════
 const ADJ_KEY = 'flujoAjustes';
+
+// ── VALORES FIJADOS (pins) por serie/mes ────────────────────────────────
+// Shape: { 'ing::DESTINO'|'egr::DESTINO'|'otr::CONCEPTO': { 'YYYY-MM': number } }
+// Prefixes keep ingreso/egreso/otros namespaces apart in case a name repeats.
+// A pin is an ABSOLUTE stored value: it overrides the auto-projection for that
+// cell, survives method/window/inflation changes, and — being stored — doubles
+// as the frozen baseline for proyectado-vs-real comparison after month close.
+const PIN_KEY = 'flujoPins';
+let _pinCache = null;
+function loadPins() {
+  if (_pinCache !== null) return _pinCache;
+  try { _pinCache = JSON.parse(localStorage.getItem(PIN_KEY)||'{}') || {}; }
+  catch(e){ _pinCache = {}; }
+  return _pinCache;
+}
+function getPin(key, mes) {
+  const p = loadPins();
+  const v = p[key] && p[key][mes];
+  return (typeof v === 'number' && isFinite(v)) ? v : null;
+}
+function setPinCache(p) {
+  _pinCache = p || {};
+  try { localStorage.setItem(PIN_KEY, JSON.stringify(_pinCache)); } catch(e){}
+}
+async function savePins(p) {
+  setPinCache(p);
+  const token = sessionStorage.getItem('dashToken');
+  if (!token) return;
+  try {
+    await fetch('/api/save', {
+      method:'POST',
+      headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({key:'flujoPins', value:JSON.stringify(p)})
+    });
+  } catch(e){ console.error('Error saving pins:', e); }
+}
+// Tolerant es-AR number parsing: "30.000.000,50" | "30000000.5" | "30000000"
+function parsePinInput(raw) {
+  let s = String(raw).trim().replace(/\s|\$/g,'');
+  if (!s) return NaN;
+  if (s.includes(',')) s = s.replace(/\./g,'').replace(',','.');
+  return parseFloat(s);
+}
+async function _setPin(key, mes, val) {
+  const pins = { ...loadPins() };
+  pins[key] = { ...(pins[key]||{}) };
+  pins[key][mes] = val;
+  await savePins(pins);
+  buildDashboard();
+}
+// 📌 — pin the value the current method is showing, as-is
+window.pinAsIs = function(encKey, mes, val) {
+  _setPin(decodeURIComponent(encKey), mes, Math.round(val*100)/100);
+};
+// ✎ — pin a manually typed value
+window.pinManual = function(encKey, mes, autoVal) {
+  const key = decodeURIComponent(encKey);
+  const cur = getPin(key, mes);
+  const raw = prompt('Fijar valor proyectado para '+mes+':', cur!=null ? cur : Math.round(autoVal*100)/100);
+  if (raw === null) return;
+  const val = parsePinInput(raw);
+  if (isNaN(val) || val < 0) { alert('Valor inválido'); return; }
+  _setPin(key, mes, val);
+};
+// ✕ — release the pin, back to automatic projection
+window.unpinValue = async function(encKey, mes) {
+  const key = decodeURIComponent(encKey);
+  const pins = { ...loadPins() };
+  if (pins[key]) {
+    delete pins[key][mes];
+    if (!Object.keys(pins[key]).length) delete pins[key];
+  }
+  await savePins(pins);
+  buildDashboard();
+};
 
 // In-memory cache for adjustments (loaded from Sheets)
 let _adjCache = null;
@@ -1467,6 +1599,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const _raArr = Array.isArray(_ra) ? _ra : [];
         if (typeof setAdjCache === 'function') setAdjCache(migrateAdjustments(_raArr));
       } catch(e) { console.warn('Could not parse flujoAjustes:', e); }
+    }
+    if (_data.config && _data.config.flujoPins) {
+      try {
+        const _rp = JSON.parse(_data.config.flujoPins);
+        if (typeof setPinCache === 'function') setPinCache(_rp && typeof _rp==='object' ? _rp : {});
+      } catch(e) { console.warn('Could not parse flujoPins:', e); }
     }
     const _fl = document.getElementById('fileLabel');
     const _mins = Math.round((Date.now() - _data.ts) / 60000);
