@@ -720,9 +720,17 @@ function baseValForSeries(aggByMes) {
     // Project forward to the position right after the window (index n)
     return Math.max(0, intercept + slope*n);
   } else {
-    // avg — over the selected N-month window (average over months WITH movement only)
+    // avg — over the selected N-month window, counting zero months AS ZERO.
+    // Dividing only by months WITH movement (the old behavior) inflated sporadic
+    // destinos (a 300-every-3-months payment "averaged" 300 instead of 100) and
+    // made the sum of per-destino projections exceed the aggregate projection.
+    // With the full-window denominator, avg/trend/last are all linear, so
+    // Σ proj(destino) === proj(Σ destinos): the detail tabs now reconcile exactly
+    // with the Resumen. Same principle as the trend fix: zeros are real data.
+    // Trade-off: brand-new destinos get diluted by their pre-existence zeros —
+    // pin (📌) their value manually, that's what pins are for.
     const vals = windowMeses.map(m => aggByMes[m] || 0);
-    return vals.reduce((s,v)=>s+v,0) / Math.max(vals.filter(v=>v>0).length,1);
+    return vals.reduce((s,v)=>s+v,0) / Math.max(vals.length,1);
   }
 }
 
@@ -848,7 +856,23 @@ function valCell(v, isProj, cls='', extraMonto) {
 // outline + 📌 and a ✕ to release back to the automatic projection.
 // Real (past / current-real) columns fall through to the normal valCell.
 function pinnableCell(v, col, pinKey, cls, extraMonto) {
-  if (!(col.isProj || col.isCurrentProj)) return valCell(v, col.isProj, cls, extraMonto);
+  if (!(col.isProj || col.isCurrentProj)) {
+    // Closed real month: if a value was pinned for this month back when it was
+    // future, we now have a frozen baseline → show Real | Proyectado | Desvío.
+    // Favorable = spent less than projected (egr) / earned more than projected (pos).
+    const proy = (!col.isCurrentReal) ? getPin(pinKey, col.mes) : null;
+    if (proy !== null) {
+      const real = v;
+      const dif  = real - proy;
+      const fav  = (cls==='egr') ? dif <= 0 : dif >= 0;
+      const pct  = proy !== 0 ? (dif/proy*100) : null;
+      const color = cls==='pos'?'val-pos':cls==='egr'?'val-neg':'val-neu';
+      return `<td class="pv ${color}" title="Comparación contra el valor que fijaste cuando este mes era proyectado">${real===0?'—':fmt(real)}`+
+        `<div style="font-size:9px;color:var(--muted2);font-style:italic;">📌 P: ${fmt(proy)} · `+
+        `<span style="color:${fav?'var(--green)':'var(--red)'};font-style:normal;">Δ ${dif>=0?'+':''}${fmt(dif)}${pct!==null?' ('+(pct>=0?'+':'')+pct.toFixed(1)+'%)':''}</span></div></td>`;
+    }
+    return valCell(v, col.isProj, cls, extraMonto);
+  }
   const enc = encodeURIComponent(pinKey);
   const color = cls==='pos'?'val-pos':cls==='egr'?'val-neg':'val-neu';
   const isPinned = getPin(pinKey, col.mes) !== null;
@@ -1015,21 +1039,52 @@ function renderResumen(sec) {
 
   function renderAdjConceptRow(a, colorVar) {
     const valores = a.valores || {};
+    // Destino asociado (Etapa 2): links this manual concept to a REAL destino so
+    // closed months can show Proyectado | Real | Desvío. Options come from the
+    // destinos that actually exist in the data, namespaced ing::/egr::/otr::.
+    const destOpts = a.type==='gasto'
+      ? [{g:'Egresos', pre:'egr::', keys:pagDests}]
+      : [{g:'Cobranzas', pre:'ing::', keys:cobDests},{g:'Otros Ingresos', pre:'otr::', keys:otrosKeys}];
+    const destSelect = `<select onchange="setAdjDest('${a.id}',this.value)" title="Destino real asociado — permite comparar Proyectado vs Real al cierre del mes"
+        style="max-width:150px;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:${a.dest?'var(--text)':'var(--muted2)'};font-size:10px;padding:1px 3px;margin-top:2px;display:block;">
+        <option value="">— sin destino asociado —</option>
+        ${destOpts.map(o=>`<optgroup label="${o.g}">${o.keys.map(d=>`<option value="${o.pre}${encodeURIComponent(d)}" ${a.dest===o.pre+encodeURIComponent(d)?'selected':''}>${d}</option>`).join('')}</optgroup>`).join('')}
+      </select>`;
+    // Real movements of the linked destino for a given month
+    function realForDest(destKey, mes){
+      if (!destKey) return null;
+      const name = decodeURIComponent(destKey.slice(5));
+      if (destKey.startsWith('egr::')) return (aggPagByDest[name]  ||{})[mes]||0;
+      if (destKey.startsWith('ing::')) return (aggCobByDest[name]  ||{})[mes]||0;
+      if (destKey.startsWith('otr::')) return (aggOtrosByDest[name]||{})[mes]||0;
+      return null;
+    }
     return `<tr class="manual-row"><td>
       ${a.desc} <span class="del-btn" onclick="deleteAdjustmentConcept('${a.id}')" title="Eliminar concepto entero">✕</span>
+      ${destSelect}
     </td>${cols.map(c=>{
       if (!c.isProj && !c.isCurrentProj) {
         // Current month's REAL half: show nothing — the projected amount for this
         // month is already visible/editable right next door in the (proy.)★ column.
         if (c.isCurrentReal) return `<td class="pv">—</td>`;
-        // Completed real month: the projection we had loaded for this month is
-        // NOT editable anymore (it's the past) and does NOT feed any total
-        // (resolveAdjVal returns 0 for completed months). But we still show it,
-        // dimmed and read-only, as a reference to eyeball against the real result.
         const pv = valores[c.mes];
         if (!pv) return `<td class="pv">—</td>`;
+        // Closed month WITH a linked destino → full comparison. Favorable means
+        // real income above projection / real expense below projection.
+        const real = realForDest(a.dest, c.mes);
+        if (real !== null) {
+          const dif = real - pv;
+          const fav = a.type==='gasto' ? dif <= 0 : dif >= 0;
+          const pct = pv !== 0 ? (dif/pv*100) : null;
+          return `<td class="pv" style="text-align:right;" title="Real del destino asociado vs lo que habías proyectado">`+
+            `<span style="color:${colorVar};font-family:'DM Mono',monospace;font-size:11px;">${fmt(real)}</span>`+
+            `<div style="font-size:9px;color:var(--muted2);font-style:italic;">P: ${fmt(pv)} · `+
+            `<span style="color:${fav?'var(--green)':'var(--red)'};font-style:normal;">Δ ${dif>=0?'+':''}${fmt(dif)}${pct!==null?' ('+(pct>=0?'+':'')+pct.toFixed(1)+'%)':''}</span></div></td>`;
+        }
+        // Closed month WITHOUT destino: keep the dimmed read-only reference.
+        // (resolveAdjVal returns 0 for completed months either way — display only.)
         const pvDisplay = pv.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
-        return `<td class="pv" style="color:var(--muted2);font-style:italic;font-family:'DM Mono',monospace;font-size:11px;text-align:right;" title="Proyectado que habías cargado para este mes (referencia — no afecta el resultado real)">${pvDisplay}</td>`;
+        return `<td class="pv" style="color:var(--muted2);font-style:italic;font-family:'DM Mono',monospace;font-size:11px;text-align:right;" title="Proyectado que habías cargado para este mes (referencia — no afecta el resultado real). Asociale un destino para ver el desvío contra lo real.">${pvDisplay}</td>`;
       }
       const v = valores[c.mes] || '';
       const vDisplay = v ? v.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
@@ -1520,6 +1575,16 @@ async function saveAdjustments(adjs) {
     });
   } catch(e){ console.error('Error saving adjustments:', e); }
 }
+// Etapa 2: link a manual adjustment concept to a real destino ('egr::X'|'ing::X'|'otr::X').
+// Stored on the concept itself → travels with flujoAjustes to Sheets like everything else.
+window.setAdjDest = async function(id, dest) {
+  const adjs = loadAdjustments();
+  const a = adjs.find(x => String(x.id) === String(id));
+  if (!a) return;
+  if (dest) a.dest = dest; else delete a.dest;
+  await saveAdjustments(adjs);
+  buildDashboard();
+};
 async function addAdjustmentConcept(type) {
   const inputId = type === 'ingreso' ? 'adjDescIngreso' : 'adjDescGasto';
   const desc = document.getElementById(inputId)?.value.trim();
